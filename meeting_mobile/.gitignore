@@ -1,0 +1,15 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+.DS_Store
+
+# 本地调试配置（生产地址不放仓库）
+# assets/config.json 保留，生产打包时替换

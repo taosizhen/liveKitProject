@@ -1,0 +1,106 @@
+# =========================================================
+# Meeting Platform — Docker Compose
+# ---------------------------------------------------------
+# 服务一览：
+#   backend    Go API（Gin + SQLite，零外部数据库依赖）
+#   caddy      HTTPS 反代 + 前端静态托管（自签证书）
+#
+# LiveKit Server：不放在本 compose 里，继续用宿主机手动启动
+#   deploy/bin/livekit-server.exe --config deploy/livekit.yaml
+#   后端通过 LIVEKIT_URL=ws://192.168.100.101:7880 直连
+#   （如需把 LiveKit 也容器化，详见仓库根目录历史 docker-compose 注释）
+#
+# 启动前提：
+#   1. 前端已构建 → dist 已拷到 backend/web/（make build-frontend）
+#   2. backend/.env 已正确配置
+# =========================================================
+
+services:
+
+  # ========== Caddy — HTTPS 反代 + 前端静态 ==========
+  caddy:
+    image: caddy:2-alpine
+    container_name: meeting-caddy
+    restart: unless-stopped
+    # 443 HTTPS（Caddy 自动处理 TLS），80 HTTP 自动跳转
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # 前端打包产物（Makefile build-frontend 会把 dist/ 拷到 backend/web/）
+      - ./backend/web:/var/www:ro
+      # Caddy 自签证书缓存目录（避免每次重启重新签）
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  # ========== 后端 API ==========
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: meeting-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # 容器内强制用 SQLite（不依赖外部 Postgres）
+      - DB_DRIVER=sqlite
+      - SQLITE_PATH=/app/data/meeting.db
+      # 对外 URL：Caddy 反代 /api → backend，邮件里的会议链接要 HTTPS
+      - APP_BASE_URL=https://192.168.100.101
+      # LiveKit 跑在宿主机，容器内通过 host 网关 + 端口访问
+      # WSL2 默认 host 网关 = host.docker.internal
+      # 如不通可改成宿主机 IP 或在 .env 里直接覆写
+      - LIVEKIT_URL=ws://host.docker.internal:7880
+      # .env 里的 CORS_ORIGIN 继续生效（允许的 Origin 白名单）
+      # 但 Caddy 反代时 Origin 头已保持原样，后端 CORS 会正确匹配
+    volumes:
+      # SQLite 文件持久化（容器 ↔ 宿主机共享）
+      - ./backend/data:/app/data
+      # 会议材料 + 录制文件持久化
+      - ./backend/storage:/app/storage
+      # 前端打包产物（后端本身不 serve，主要由 Caddy 托管）
+      - ./backend/web:/app/web:ro
+    # 只在 compose 网络内部暴露，不对宿主机直接开放
+    expose:
+      - "8080"
+    extra_hosts:
+      # 让容器内 host.docker.internal 可解析到宿主机（WSL2 需要）
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+# ========== 可选：PostgreSQL（当前用 SQLite，不启用） ==========
+# 如需切换：改 backend/.env → DB_DRIVER=postgres，并取消下面注释
+# services:
+#   postgres:
+#     image: postgres:16-alpine
+#     container_name: meeting-postgres
+#     restart: unless-stopped
+#     environment:
+#       POSTGRES_DB: meeting_platform
+#       POSTGRES_USER: meeting
+#       POSTGRES_PASSWORD: meeting_dev_pass_2026
+#     ports:
+#       - "5433:5432"
+#     volumes:
+#       - pgdata:/var/lib/postgresql/data
+# volumes:
+#   pgdata:
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,30 @@
+# ========== Go ==========
+*.exe
+*.test
+*.out
+server
+server.exe
+server_new.exe
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# ========== 运行时产物 ==========
+storage/
+!storage/.gitkeep
+web/
+*.log
+
+# ========== IDE / OS ==========
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ========== 依赖 ==========
+vendor/
+
+# ========== 环境（生产镜像用 .env.example，真实 .env 由 compose 注入） ==========
+.env

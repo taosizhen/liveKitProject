@@ -1,0 +1,66 @@
+# ================= 依赖与本地工具链 =================
+# Flutter SDK / Android SDK / pub 缓存（体积达 GB 级，绝不入库）
+.toolchain/
+**/node_modules/
+**/.dart_tool/
+**/.pub-cache/
+**/.gradle/
+**/.cxx/
+**/Pods/
+**/.symlinks/
+
+# ================= 构建产物 =================
+**/build/
+**/dist/
+**/*.apk
+**/*.aab
+**/*.ipa
+**/*.so
+!**/lib/**/jniLibs/**/*.so
+**/android/local.properties
+**/android/.gradle/
+**/android/app/debug/
+**/android/app/release/
+backend/server
+backend/server.exe
+
+# ================= 运行时日志 =================
+*.log
+_*.log
+
+# ================= 敏感配置与证书（务必不要提交） =================
+backend/.env
+.env
+**/.env
+dev-tools/certs/
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+!**/*.pem.example
+
+# ================= 第三方源码与二进制 =================
+deploy/livekit-src/
+deploy/bin/
+dev-tools/win-bin/
+windows-tools/
+# 可执行二进制（caddy 49MB、mkcert 等工具）
+docker/caddy/caddy
+*.exe
+*.dll
+
+# ================= 运行时数据 =================
+# 会议录制、上传文件、本地 sqlite 数据库
+backend/storage/
+backend/data/
+
+# ================= 编辑器与系统文件 =================
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ================= 临时目录 =================
+.screenshots/
+.trae-html-share-packages/

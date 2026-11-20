@@ -1,0 +1,15 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # 项目内允许在 UI 层使用 print 之外的调试输出，但不强制
+    prefer_const_constructors: true
+
+analyzer:
+  errors:
+    # 首版先把未使用元素降级为提示，方便骨架联调
+    unused_element: info
+  exclude:
+    - build/**
+    - android/**
+    - ios/**

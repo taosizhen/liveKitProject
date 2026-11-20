@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  本地开发环境的网络安全配置：
+  Android 7.0 起默认不信任用户安装的 CA，而后端 https://192.168.100.103:8090
+  使用 mkcert 自签证书，因此这里显式信任 user 证书库（mkcert CA 安装位置）。
+  生产环境应改为仅信任正式 CA，并移除 src="user"。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+    <!-- 允许本机调试端口走明文（仅 debug 场景使用） -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

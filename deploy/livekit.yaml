@@ -1,0 +1,21 @@
+# LiveKit 本地开发配置（适配 livekit-server v1.13+ 配置结构）
+# 文档参考: https://docs.livekit.io/references/configuration/
+
+# HTTP/WebSocket 信令端口（TLS 由 livekit-tls-proxy.cjs 在 7891 端口终止）
+# 注意：7890 被 FlClash 代理内核占用、7880 被 Windows 系统保留，故使用 7895
+port: 7895
+
+# 日志
+logging:
+  level: info
+
+# RTC 媒体配置
+rtc:
+  udp_port: 7883        # WebRTC UDP 媒体端口（7882 被系统占用）
+  tcp_port: 7881        # WebRTC TCP 回退端口
+  use_external_ip: false
+
+# 密钥对：生产环境务必更换
+# 生成方式: livekit-server generate-keys
+keys:
+  5a4c8e9f2b7d4a1b: c47f9b2a8e6d3c1b5a9f2e7d4b6c8a1f

@@ -1,0 +1,42 @@
+# =========================================================
+# Caddy 配置（WSL 开发，高位端口，自签证书）
+# ---------------------------------------------------------
+# 监听：
+#   https://localhost:8443 / https://192.168.100.101:8443  HTTPS
+#   http://localhost:8081  / http://192.168.100.101:8081   HTTP→HTTPS 跳转
+#
+# 生产环境如需 443/80：
+#   sudo setcap 'cap_net_bind_service=+ep' caddy
+#   改下方端口 :8443→:443, :8081→:80
+# =========================================================
+
+# 顶层选项：关闭 auto_https 自动管理（我们自己显式配 HTTPS）
+{
+    auto_https off
+}
+
+(backend_api) {
+    reverse_proxy 127.0.0.1:8080
+}
+
+# ---------- HTTPS（自签） ----------
+localhost:8443, 192.168.100.101:8443 {
+    tls internal
+
+    handle /api/* {
+        import backend_api
+    }
+    handle /storage/* {
+        import backend_api
+    }
+
+    # 前端 SPA（相对 Caddyfile：../../backend/web）
+    root * ../../backend/web
+    try_files {path} /index.html
+    file_server
+}
+
+# ---------- HTTP → HTTPS ----------
+localhost:8081, 192.168.100.101:8081 {
+    redir https://{host}:8443{path}?{query} 308
+}
