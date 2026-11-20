@@ -157,6 +157,21 @@ $env:PUB_CACHE='D:\CODE\WOAN\liveKitProject\.toolchain\pub-cache'
 
 启动前按需修改 `meeting_mobile/assets/config.json` 中的后端地址。
 
+### 6. 打包 Android APK
+
+```powershell
+cd d:\CODE\WOAN\liveKitProject
+.\build_apk.ps1            # 通用 release APK（兼容所有 ABI）
+.\build_apk.ps1 -Split     # 按 ABI 拆分，体积更小（推荐真机分发）
+.\build_apk.ps1 -Clean     # 先 flutter clean 再构建
+```
+
+脚本会自动设置 `PUB_CACHE` 与 `KOTLIN_USER_HOME`（均指向仓库内目录，避免写入
+`%LOCALAPPDATA%` 被沙箱拦截），并把产物复制到 `dist/apk/`（文件名带时间戳）。
+
+> release 包当前使用 debug 签名，仅用于内测安装；上架前需配置正式 keystore。
+
+
 ### 5. 远程控制桌面代理（被控端 PC，可选）
 
 ```bash

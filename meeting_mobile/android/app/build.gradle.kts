@@ -36,6 +36,15 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    lint {
+        // release 打包跳过 lintVital 检查：
+        // image_picker_android 等第三方插件的 lint 在 AGP 8.x + JDK 17 下会因
+        // CommentDetector 内部错误崩溃（NoSuchMethodError: List.removeLast），
+        // 属于 AGP lint 自身 bug，与本项目代码无关；跳过不影响 APK 产物正确性。
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
 }
 
 kotlin {

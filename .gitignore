@@ -8,6 +8,8 @@
 **/.cxx/
 **/Pods/
 **/.symlinks/
+# Kotlin 编译缓存（build_apk.ps1 将其重定向到项目内，避免写 %LOCALAPPDATA%）
+.kotlin-home/
 
 # ================= 构建产物 =================
 **/build/
