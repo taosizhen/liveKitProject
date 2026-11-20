@@ -100,6 +100,24 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  /// 上传并更新当前用户头像，返回是否成功
+  Future<bool> uploadAvatar(String filePath) async {
+    final user = state.user;
+    if (user == null) return false;
+    try {
+      final updated =
+          await ref.read(authRepositoryProvider).uploadAvatar(user, filePath);
+      state = state.copyWith(user: updated);
+      return true;
+    } on ApiException catch (e) {
+      state = state.copyWith(error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(error: '头像上传失败，请稍后重试');
+      return false;
+    }
+  }
+
   /// 登录态失效：清空并跳转登录页
   void _handleAuthLost() {
     state = const AuthState(error: '登录已过期，请重新登录');

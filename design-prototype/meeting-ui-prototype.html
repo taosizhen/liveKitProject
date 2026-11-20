@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>会议平台 · 同框圆桌 / 动态主持人 / 举手点名 / 远程控制 — 设计原型</title>
+<style>
+  :root{
+    --bg:#0b1220; --bg2:#0f172a; --panel:#ffffff; --line:rgba(255,255,255,.08);
+    --brand:#3b82f6; --brand2:#2563eb; --ok:#22c55e; --warn:#f59e0b; --danger:#ef4444;
+    --text:#e5e7eb; --muted:#94a3b8; --shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box; -webkit-font-smoothing:antialiased;}
+  body{margin:0; font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; background:#070d18; color:var(--text);}
+  button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit;}
+  ::-webkit-scrollbar{width:8px;height:8px} ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:8px}
+
+  /* ===== 演示控制台（原型专用，不属于产品 UI） ===== */
+  #console{background:linear-gradient(180deg,#111c33,#0c1426); border-bottom:1px solid var(--line); padding:10px 16px; position:sticky; top:0; z-index:200;}
+  #console .row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  #console .row + .row{margin-top:8px;}
+  #console .tag{font-size:11px; color:#7dd3fc; letter-spacing:.5px; text-transform:uppercase; margin-right:4px;}
+  .cbtn{background:rgba(59,130,246,.12); border:1px solid rgba(59,130,246,.35); color:#bcd6ff; padding:6px 12px; border-radius:8px; font-size:12.5px; transition:.15s;}
+  .cbtn:hover{background:rgba(59,130,246,.25); transform:translateY(-1px);}
+  .cbtn.on{background:var(--brand); border-color:var(--brand); color:#fff;}
+  .cbtn.warn{background:rgba(245,158,11,.12); border-color:rgba(245,158,11,.4); color:#fde68a;}
+  .cbtn.warn:hover{background:rgba(245,158,11,.25);}
+  .cbtn.danger{background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.4); color:#fecaca;}
+  .cbtn.danger:hover{background:rgba(239,68,68,.25);}
+  #console .hint{font-size:11px; color:var(--muted); margin-left:auto;}
+
+  /* ===== 会议主框架 ===== */
+  #app{height:calc(100vh - 92px); display:flex; flex-direction:column; background:var(--bg); overflow:hidden;}
+  header.top{height:56px; flex:none; display:flex; align-items:center; gap:14px; padding:0 18px; background:var(--bg2); border-bottom:1px solid var(--line);}
+  .mtitle{font-weight:600; font-size:15px;}
+  .mroom{font-size:11px; color:var(--muted);}
+  .topright{margin-left:auto; display:flex; align-items:center; gap:16px; font-size:12px; color:var(--muted);}
+  .recflag{display:flex; align-items:center; gap:6px; color:#f87171;}
+  .recdot{width:8px;height:8px;border-radius:50%;background:var(--danger); animation:blink 1.2s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  .hostpill{display:flex; align-items:center; gap:6px; background:rgba(245,158,11,.14); border:1px solid rgba(245,158,11,.4); color:#fcd34d; padding:4px 10px; border-radius:999px; font-size:12px;}
+
+  .main{flex:1; min-height:0; display:flex;}
+  /* --- 主舞台 --- */
+  .stage{flex:1; min-width:0; position:relative; background:#000; overflow:hidden;}
+  .stageVideo{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;}
+  .stageVideo .ph{width:100%; height:100%; object-fit:contain; background:radial-gradient(ellipse at center,#1b2740 0%,#0a0f1c 70%); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px; color:#64748b;}
+  .pipSelf{position:absolute; right:14px; bottom:14px; width:180px; aspect-ratio:16/9; border-radius:10px; overflow:hidden; border:1px solid rgba(255,255,255,.2); box-shadow:var(--shadow); z-index:20; background:#0b1220;}
+  .pipSelfLabel{position:absolute; left:8px; bottom:6px; font-size:11px; background:rgba(0,0,0,.55); padding:2px 7px; border-radius:6px;}
+  .annoHint{position:absolute; left:14px; top:12px; z-index:20; background:rgba(168,85,247,.16); border:1px solid rgba(168,85,247,.45); color:#e9d5ff; font-size:12px; padding:5px 11px; border-radius:8px; display:none;}
+  .annoHint.show{display:block;}
+  .speakerBanner{position:absolute; left:14px; top:12px; z-index:20; background:rgba(34,197,94,.16); border:1px solid rgba(34,197,94,.5); color:#bbf7d0; font-size:12px; padding:5px 11px; border-radius:8px; display:none; align-items:center; gap:6px;}
+  .speakerBanner.show{display:flex;}
+
+  /* --- 小地图（浮动互换） --- */
+  .minimap{position:absolute; left:14px; bottom:14px; width:230px; border-radius:12px; overflow:hidden; border:1px solid rgba(255,255,255,.18); box-shadow:var(--shadow); z-index:30; background:#0b1220; cursor:pointer; transition:transform .18s;}
+  .minimap:hover{transform:scale(1.03); border-color:var(--brand);}
+  .minimap .mmhead{display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:rgba(255,255,255,.06); font-size:11.5px; color:#cbd5e1;}
+  .minimap .mmhead .expand{color:#7dd3fc; font-size:11px;}
+  .minimap .mmbody{height:150px; position:relative;}
+
+  /* --- 右侧栏 --- */
+  aside.side{width:320px; flex:none; display:flex; flex-direction:column; background:var(--panel); color:#334155; border-left:1px solid #e2e8f0;}
+  .tabs{display:flex; border-bottom:1px solid #e2e8f0;}
+  .tab{flex:1; padding:11px 0; font-size:13.5px; color:#64748b; border-bottom:2px solid transparent; display:flex; align-items:center; justify-content:center; gap:6px; position:relative;}
+  .tab.on{color:var(--brand2); border-bottom-color:var(--brand2); font-weight:600;}
+  .tab .badge{position:absolute; top:5px; margin-left:38px; background:var(--danger); color:#fff; font-size:10px; min-width:16px; height:16px; border-radius:999px; display:flex; align-items:center; justify-content:center; padding:0 4px;}
+  .sidebody{flex:1; min-height:0; overflow-y:auto; padding:10px;}
+  .member{display:flex; align-items:center; gap:10px; padding:8px; border-radius:10px; transition:.15s; position:relative;}
+  .member:hover{background:#f1f5f9;}
+  .member.speaking{background:#eff6ff; box-shadow:inset 0 0 0 1.5px var(--brand);}
+  .mav{width:40px; height:40px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-weight:600; color:#fff; font-size:15px; overflow:hidden; position:relative;}
+  .mav img{width:100%; height:100%; object-fit:cover;}
+  .minfo{flex:1; min-width:0;}
+  .mname{font-size:13.5px; font-weight:600; color:#0f172a; display:flex; align-items:center; gap:6px;}
+  .mrole{font-size:11px; color:#94a3b8;}
+  .micons{display:flex; align-items:center; gap:6px;}
+  .micdot{width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#f1f5f9; color:#475569;}
+  .micdot.off{background:#fee2e2; color:#dc2626;}
+  .hostbadge{display:inline-flex; align-items:center; gap:3px; background:linear-gradient(135deg,#f59e0b,#f97316); color:#fff; font-size:10px; padding:2px 7px; border-radius:999px; font-weight:600;}
+  .handbadge{display:inline-flex; align-items:center; gap:3px; background:#fef3c7; color:#b45309; font-size:11px; padding:2px 7px; border-radius:999px; border:1px solid #fde68a;}
+  .callbtn{font-size:11.5px; background:var(--brand); color:#fff; padding:5px 10px; border-radius:8px; display:none;}
+  .member.raised .callbtn{display:inline-block;}
+  .member.ishost-view .callbtnAlways{display:inline-block;}
+  .callbtn:hover{background:var(--brand2);}
+  .seclabel{font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.5px; margin:6px 4px 4px;}
+
+  /* --- 底部工具栏 --- */
+  footer.tools{height:76px; flex:none; display:flex; align-items:center; justify-content:center; gap:10px; background:var(--bg2); border-top:1px solid var(--line);}
+  .tbtn{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; width:70px; height:56px; border-radius:12px; font-size:11.5px; color:rgba(255,255,255,.75); transition:.15s; position:relative;}
+  .tbtn:hover{background:rgba(255,255,255,.08);}
+  .tbtn.active{background:rgba(255,255,255,.14); color:#fff;}
+  .tbtn.danger{background:rgba(239,68,68,.9); color:#fff;}
+  .tbtn.danger:hover{background:var(--danger);}
+  .tbtn .dot{position:absolute; top:6px; right:14px; width:8px; height:8px; border-radius:50%; background:var(--danger); display:none;}
+  .tbtn.hasDot .dot{display:block;}
+  .ticon{width:22px; height:22px;}
+
+  /* --- 同框圆桌（主位） --- */
+  #roundStage{position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:radial-gradient(ellipse at center,#13203a 0%,#070d18 75%);}
+  #roundStage.show{display:flex;}
+  .tableWrap{position:relative; width:min(72vh,86%); aspect-ratio:1/1;}
+  .tableBg{position:absolute; inset:6%; border-radius:50%; background-size:cover; background-position:center; box-shadow:0 0 0 10px rgba(255,255,255,.03), 0 30px 80px rgba(0,0,0,.6), inset 0 0 60px rgba(0,0,0,.5); border:6px solid #2a2417;}
+  .tableBg::after{content:""; position:absolute; inset:0; border-radius:50%; background:radial-gradient(circle at 50% 40%, rgba(255,255,255,.06), transparent 60%);}
+  .tableCenterText{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:#cbd5e1; pointer-events:none;}
+  .seat{position:absolute; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:6px; transition:.2s;}
+  .seatAvatar{border-radius:50%; overflow:hidden; position:relative; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:600; box-shadow:0 6px 18px rgba(0,0,0,.5); border:3px solid rgba(255,255,255,.14); background:#334155;}
+  .seatAvatar img{width:100%; height:100%; object-fit:cover;}
+  .seat.speaking .seatAvatar{border-color:var(--ok); box-shadow:0 0 0 4px rgba(34,197,94,.35), 0 0 30px rgba(34,197,94,.5); animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(34,197,94,.35),0 0 22px rgba(34,197,94,.4)}50%{box-shadow:0 0 0 7px rgba(34,197,94,.2),0 0 40px rgba(34,197,94,.65)}}
+  .seatName{font-size:12px; background:rgba(0,0,0,.55); padding:3px 9px; border-radius:999px; white-space:nowrap; display:flex; align-items:center; gap:5px;}
+  .seatMic{position:absolute; right:-2px; bottom:-2px; width:22px; height:22px; border-radius:50%; background:#1f2937; display:flex; align-items:center; justify-content:center; border:2px solid #0b1220; color:#9ca3af;}
+  .seatMic.off{background:#7f1d1d; color:#fecaca;}
+  .seatHost{position:absolute; left:-4px; top:-6px; background:linear-gradient(135deg,#f59e0b,#f97316); width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.5); border:2px solid #0b1220;}
+  .seatHand{position:absolute; right:-6px; top:-8px; font-size:16px; background:#fef3c7; border-radius:50%; width:24px; height:24px; display:flex; align-items:center; justify-content:center; border:2px solid #0b1220;}
+
+  /* --- 成员列表主位（全屏） --- */
+  #listStage{position:absolute; inset:0; display:none; background:linear-gradient(180deg,#0d1730,#0a1224); padding:26px; overflow-y:auto;}
+  #roundStage.show ~ #roundStage{} /* noop */
+  #listStage.show{display:block;}
+  #listStage h3{margin:0 0 18px; font-size:16px; color:#e2e8f0;}
+  .gridMembers{display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px;}
+  .gcard{background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:14px; padding:18px 14px; display:flex; flex-direction:column; align-items:center; gap:10px; position:relative; transition:.15s;}
+  .gcard:hover{border-color:var(--brand); transform:translateY(-2px);}
+  .gcard.speaking{border-color:var(--ok); box-shadow:0 0 24px rgba(34,197,94,.25);}
+  .gav{width:76px; height:76px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:26px; color:#fff; font-weight:600; position:relative;}
+  .gav img{width:100%;height:100%;object-fit:cover;}
+  .gname{font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px;}
+
+  /* --- 远程控制弹窗 --- */
+  #rcModal{position:fixed; inset:0; background:rgba(2,6,23,.7); backdrop-filter:blur(4px); display:none; align-items:center; justify-content:center; z-index:300;}
+  #rcModal.show{display:flex;}
+  .rcBox{background:#fff; color:#0f172a; width:400px; border-radius:16px; overflow:hidden; box-shadow:var(--shadow); animation:pop .25s;}
+  @keyframes pop{from{transform:scale(.92); opacity:0}to{transform:scale(1); opacity:1}}
+  .rcHead{padding:20px 22px 0; display:flex; align-items:center; gap:12px;}
+  .rcIcon{width:46px; height:46px; border-radius:12px; background:#eff6ff; color:var(--brand2); display:flex; align-items:center; justify-content:center; flex:none;}
+  .rcBody{padding:14px 22px 20px; font-size:13.5px; color:#475569; line-height:1.6;}
+  .rcBody .who{font-weight:700; color:#0f172a;}
+  .rcWarn{margin-top:10px; background:#fffbeb; border:1px solid #fde68a; color:#b45309; font-size:12px; padding:9px 12px; border-radius:9px;}
+  .rcFoot{display:flex; gap:10px; padding:0 22px 20px;}
+  .rcBtn{flex:1; padding:11px 0; border-radius:10px; font-size:14px; font-weight:600;}
+  .rcBtn.allow{background:var(--brand); color:#fff;} .rcBtn.allow:hover{background:var(--brand2);}
+  .rcBtn.deny{background:#f1f5f9; color:#475569;} .rcBtn.deny:hover{background:#e2e8f0;}
+  .rcBar{position:fixed; top:14px; left:50%; transform:translateX(-50%); z-index:290; background:rgba(127,29,29,.92); border:1px solid rgba(239,68,68,.6); color:#fecaca; padding:8px 16px; border-radius:999px; font-size:12.5px; display:none; align-items:center; gap:10px; box-shadow:var(--shadow);}
+  .rcBar.show{display:flex;}
+  .rcBar .stop{background:#fff; color:#7f1d1d; font-weight:700; padding:3px 12px; border-radius:999px; font-size:12px;}
+
+  /* --- toast --- */
+  #toasts{position:fixed; top:70px; left:50%; transform:translateX(-50%); z-index:400; display:flex; flex-direction:column; gap:8px; align-items:center;}
+  .toast{background:#111c33; border:1px solid var(--line); color:#e2e8f0; padding:10px 18px; border-radius:999px; font-size:13px; box-shadow:var(--shadow); display:flex; align-items:center; gap:8px; animation:pop .25s;}
+  .toast.ok{border-color:rgba(34,197,94,.5);} .toast.warn{border-color:rgba(245,158,11,.5);} .toast.brand{border-color:rgba(59,130,246,.5);}
+
+  /* 头像上传入口（个人资料卡片，演示） */
+  #profileCard{position:fixed; right:18px; bottom:18px; z-index:250; background:#fff; color:#0f172a; width:280px; border-radius:14px; box-shadow:var(--shadow); overflow:hidden; display:none;}
+  #profileCard.show{display:block;}
+  .pcHead{padding:14px 16px; background:#f8fafc; border-bottom:1px solid #e2e8f0; font-weight:600; font-size:14px; display:flex; justify-content:space-between; align-items:center;}
+  .pcBody{padding:18px 16px; display:flex; flex-direction:column; align-items:center; gap:12px;}
+  .pcAvWrap{position:relative; width:88px; height:88px;}
+  .pcAv{width:88px; height:88px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:30px; color:#fff; font-weight:600; background:#334155;}
+  .pcAv img{width:100%;height:100%;object-fit:cover;}
+  .pcAvEdit{position:absolute; right:0; bottom:0; width:28px; height:28px; border-radius:50%; background:var(--brand); color:#fff; display:flex; align-items:center; justify-content:center; border:2px solid #fff; cursor:pointer;}
+  .pcUpload{width:100%; padding:10px; border:1.5px dashed #cbd5e1; border-radius:10px; color:#64748b; font-size:13px; text-align:center; cursor:pointer; transition:.15s;}
+  .pcUpload:hover{border-color:var(--brand); color:var(--brand2); background:#eff6ff;}
+  .pcName{font-weight:600;}
+  .pcRole{font-size:12px; color:#94a3b8;}
+  .hintLine{font-size:11px; color:#94a3b8; text-align:center;}
+</style>
+</head>
+<body>
+
+<!-- ======== 演示控制台（原型专用） ======== -->
+<div id="console">
+  <div class="row">
+    <span class="tag">① 同框视图</span>
+    <button class="cbtn on" data-view="round" onclick="setView('round',this)">圆桌主位</button>
+    <button class="cbtn" data-view="list" onclick="setView('list',this)">参会列表主位</button>
+    <button class="cbtn" data-view="video" onclick="setView('video',this)">视频主位(默认)</button>
+    <span class="hint">点击左下「小地图」可在 圆桌⇄列表 间互换</span>
+  </div>
+  <div class="row">
+    <span class="tag">② 语音/主持人</span>
+    <button class="cbtn" onclick="simSpeak()">模拟发言(切主位+高亮)</button>
+    <button class="cbtn warn" onclick="teacherJoin()">老师进入→接任主持</button>
+    <button class="cbtn danger" onclick="teacherLeave()">老师下线→最早者接任</button>
+    <button class="cbtn" onclick="toggleAnno()">开关标注(禁止切主位)</button>
+  </div>
+  <div class="row">
+    <span class="tag">③ 举手/点名</span>
+    <button class="cbtn" onclick="simRaise()">学生举手</button>
+    <button class="cbtn warn" onclick="document.getElementById('profileCard').classList.toggle('show')">头像上传入口</button>
+    <button class="cbtn danger" onclick="document.getElementById('rcModal').classList.add('show')">远程控制授权弹窗</button>
+  </div>
+</div>
+
+<!-- ======== 会议主框架 ======== -->
+<div id="app">
+  <header class="top">
+    <div>
+      <div class="mtitle">跨端标注联调 · 在线课堂</div>
+      <div class="mroom">房间号 room-5076e005 · 192.168.100.103</div>
+    </div>
+    <div class="topright">
+      <span class="recflag"><span class="recdot"></span>录制中 12:34</span>
+      <span class="hostpill" id="hostPill">👑 主持人：<b id="hostName">王老师</b></span>
+      <span>👥 <b id="pcount">6</b> 人</span>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- 主舞台 -->
+    <div class="stage" id="stage">
+      <!-- 视频主位 -->
+      <div class="stageVideo" id="videoStage">
+        <div class="ph">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/></svg>
+          <div id="mainLabel">主画面 · 跟随发言人</div>
+        </div>
+      </div>
+
+      <!-- 圆桌主位 -->
+      <div id="roundStage">
+        <div class="tableWrap" id="tableWrap">
+          <div class="tableBg" id="tableBg"></div>
+          <div class="tableCenterText">
+            <div style="font-size:13px; opacity:.8;">同框模式</div>
+            <div style="font-size:11px; opacity:.5;">全员同坐圆桌</div>
+          </div>
+          <!-- 席位由 JS 生成 -->
+        </div>
+      </div>
+
+      <!-- 列表主位（全屏） -->
+      <div id="listStage">
+        <h3>参会者列表（全屏）· 点右下小地图返回圆桌</h3>
+        <div class="gridMembers" id="gridMembers"></div>
+      </div>
+
+      <div class="speakerBanner" id="speakerBanner">🔊 <b id="spkName">张三</b> 正在发言</div>
+      <div class="annoHint" id="annoHint">✏️ 标注模式已开启 — 自动切主位已暂停</div>
+
+      <!-- 本地小窗 -->
+      <div class="pipSelf" id="pipSelf">
+        <div class="ph" style="width:100%;height:100%;background:linear-gradient(135deg,#1e3a8a,#0f172a);display:flex;align-items:center;justify-content:center;color:#93c5fd;font-size:12px;">我的画面</div>
+        <span class="pipSelfLabel">我（学生）</span>
+      </div>
+
+      <!-- 小地图（浮动互换） -->
+      <div class="minimap" id="minimap" onclick="swapMinimap()" title="点击放大互换">
+        <div class="mmhead"><span id="mmTitle">参会列表</span><span class="expand">⤢ 放大</span></div>
+        <div class="mmbody" id="mmBody"></div>
+      </div>
+    </div>
+
+    <!-- 右侧栏 -->
+    <aside class="side">
+      <div class="tabs">
+        <button class="tab on" onclick="setTab(this,'members')">成员 <span class="badge" id="raiseCount" style="display:none">0</span></button>
+        <button class="tab" onclick="setTab(this,'chat')">聊天</button>
+        <button class="tab" onclick="setTab(this,'mat')">材料</button>
+      </div>
+      <div class="sidebody" id="sideBody">
+        <div class="seclabel">主持人</div>
+        <div id="hostList"></div>
+        <div class="seclabel">参会者</div>
+        <div id="memberList"></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 底部工具栏 -->
+  <footer class="tools">
+    <button class="tbtn active" id="tMic" onclick="this.classList.toggle('active')"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span>静音</span></button>
+    <button class="tbtn"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/></svg><span>摄像头</span></button>
+    <button class="tbtn"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>共享</span></button>
+    <button class="tbtn active" title="未开标注时，谁说话自动切主位"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="3"/></svg><span>跟随发言</span></button>
+    <button class="tbtn" id="tHand" onclick="toggleHand()"><span class="dot"></span><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V12m0-6.5v-1a1.5 1.5 0 0 1 3 0V12m0-5.5a1.5 1.5 0 0 1 3 0V13m0-3.5a1.5 1.5 0 0 1 3 0v4a6 6 0 0 1-6 6h-1.6a6 6 0 0 1-4.8-2.4L6 16.5a1.6 1.6 0 0 1 2.4-2"/></svg><span>举手</span></button>
+    <button class="tbtn" id="tRound" onclick="toggleRound()"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/></svg><span>同框</span></button>
+    <button class="tbtn" onclick="toggleAnno()"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>标注</span></button>
+    <button class="tbtn"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span>录制</span></button>
+    <button class="tbtn danger"><svg class="ticon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 15l-3-3 3-3M7 12h9M21 12a9 9 0 1 1-9-9"/></svg><span>离开</span></button>
+  </footer>
+</div>
+
+<!-- 远程控制授权弹窗 -->
+<div id="rcModal">
+  <div class="rcBox">
+    <div class="rcHead">
+      <div class="rcIcon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v12H4zM8 20h8M12 16v4"/><path d="m9 9 2 2 4-4"/></svg></div>
+      <div style="font-size:16px; font-weight:700;">远程控制请求</div>
+    </div>
+    <div class="rcBody">
+      <span class="who">王老师（主持人）</span> 请求远程控制你的电脑，用于协助操作。
+      <div class="rcWarn">⚠️ 允许后，对方将能看到并操作你的屏幕。你随时可按 <b>Ctrl+Alt+Esc</b> 或点击「停止控制」终止。</div>
+    </div>
+    <div class="rcFoot">
+      <button class="rcBtn deny" onclick="rcRespond(false)">拒绝</button>
+      <button class="rcBtn allow" onclick="rcRespond(true)">允许控制</button>
+    </div>
+  </div>
+</div>
+<!-- 被控中提示条 -->
+<div class="rcBar" id="rcBar">🔴 你的电脑正被 <b>王老师</b> 远程控制 <button class="stop" onclick="rcStop()">停止控制</button></div>
+
+<!-- 头像上传入口（个人资料卡） -->
+<div id="profileCard">
+  <div class="pcHead">个人资料 <button onclick="document.getElementById('profileCard').classList.remove('show')" style="color:#94a3b8;">✕</button></div>
+  <div class="pcBody">
+    <div class="pcAvWrap">
+      <div class="pcAv" id="pcAv">王</div>
+      <div class="pcAvEdit" title="更换头像"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></div>
+    </div>
+    <div class="pcName">王老师</div>
+    <div class="pcRole">teacher · 辅导老师</div>
+    <div class="pcUpload" onclick="toast('已选择图片并上传，头像下次入会生效','ok')">＋ 点击上传新头像（JPG/PNG，≤5MB）</div>
+    <div class="hintLine">上传后会议内席位 / 成员列表将显示真实头像</div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+/* ============ AI 生成图（圆桌背景 + 人物头像） ============ */
+const IMG = (p,s)=>`https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(p)}&image_size=${s}`;
+const tableBgUrl = IMG('top-down view of a round wooden conference table, dark walnut wood texture, centered circular table on dark charcoal background, photorealistic, soft ambient lighting, empty tabletop, professional meeting room aesthetic','square_hd');
+const avatarTeacher = IMG('professional headshot portrait of a middle-aged asian male teacher wearing glasses, confident warm expression, business attire, studio lighting, neutral gray background, photorealistic','square');
+const avatarWoman = IMG('professional headshot portrait of a young asian woman, friendly smile, business casual, studio lighting, neutral background, photorealistic','square');
+const avatarMan = IMG('professional headshot portrait of a young asian man, friendly smile, business casual, studio lighting, neutral background, photorealistic','square');
+document.getElementById('tableBg').style.backgroundImage = `url(${tableBgUrl})`;
+
+/* ============ 模拟参会者数据 ============ */
+const palette = ['#3b82f6','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4'];
+let members = [
+  {id:'t1', name:'王老师', role:'teacher', avatar:avatarTeacher, mic:true,  raised:false, speaking:false, host:true },
+  {id:'s1', name:'李明',   role:'student', avatar:avatarMan,     mic:false, raised:false, speaking:false, host:false},
+  {id:'s2', name:'陈静',   role:'student', avatar:avatarWoman,   mic:false, raised:false, speaking:false, host:false},
+  {id:'s3', name:'张伟',   role:'student', avatar:null,          mic:false, raised:false, speaking:false, host:false},
+  {id:'s4', name:'刘洋',   role:'student', avatar:null,          mic:false, raised:false, speaking:false, host:false},
+  {id:'me',name:'我',      role:'student', avatar:null,          mic:false, raised:false, speaking:false, host:false, self:true},
+];
+
+let view = 'round';      // round | list | video
+let annoOn = false;
+let speakingTimer = null;
+
+/* ============ 视图切换（圆桌/列表/视频 主位 + 小地图） ============ */
+function setView(v, btn){
+  view = v;
+  document.querySelectorAll('[data-view]').forEach(b=>b.classList.remove('on'));
+  if(btn) btn.classList.add('on');
+  document.getElementById('roundStage').classList.toggle('show', v==='round');
+  document.getElementById('listStage').classList.toggle('show', v==='list');
+  document.getElementById('videoStage').style.display = v==='video' ? 'flex':'none';
+  document.getElementById('pipSelf').style.display = v==='video' ? 'block':'none';
+  renderMinimap();
+  if(v==='round') renderSeats();
+  if(v==='list') renderGrid();
+}
+function swapMinimap(){
+  // 点击小地图：圆桌 ⇄ 列表 互换
+  const target = view==='round' ? 'list' : 'round';
+  setView(target, document.querySelector(`[data-view="${target}"]`));
+  toast(target==='round' ? '已放大圆桌 · 参会列表转为小地图' : '已放大参会列表 · 圆桌转为小地图','brand');
+}
+function renderMinimap(){
+  const mmBody = document.getElementById('mmBody');
+  const mmTitle = document.getElementById('mmTitle');
+  if(view==='round'){ // 圆桌主位 → 小地图显示参会列表
+    mmTitle.textContent='参会列表';
+    mmBody.innerHTML = '<div style="padding:6px;">'+members.map(m=>`
+      <div style="display:flex;align-items:center;gap:6px;padding:2px 4px;">
+        <span style="width:16px;height:16px;border-radius:50%;background:${m.avatar?`center/cover url(${m.avatar})`:pickColor(m.name)};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:8px;flex:none;">${m.avatar?'':m.name[0]}</span>
+        <span style="font-size:11px;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${m.name}${m.host?' 👑':''}${m.raised?' ✋':''}</span>
+      </div>`).join('')+'</div>';
+  } else { // 列表/视频主位 → 小地图显示圆桌
+    mmTitle.textContent='同框圆桌';
+    mmBody.innerHTML = `<div style="position:absolute;inset:12px;border-radius:50%;background:center/cover url(${tableBgUrl});border:3px solid #2a2417;box-shadow:inset 0 0 20px rgba(0,0,0,.5);"></div>` +
+      members.map((m,i)=>{
+        const n=members.length, a=(-90+i*360/n)*Math.PI/180, r=40;
+        const x=50+r*Math.cos(a), y=50+r*Math.sin(a);
+        return `<span style="position:absolute;left:${x}%;top:${y}%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:${m.avatar?`center/cover url(${m.avatar})`:pickColor(m.name)};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;border:2px solid ${m.speaking?'#22c55e':'rgba(255,255,255,.25)'};">${m.avatar?'':m.name[0]}</span>`;
+      }).join('');
+  }
+}
+
+/* ============ 圆桌席位（圆周均布） ============ */
+function seatSize(n){ return n<=6?92 : n<=12?72 : 58; }
+function renderSeats(){
+  const wrap = document.getElementById('tableWrap');
+  wrap.querySelectorAll('.seat').forEach(e=>e.remove());
+  const n = members.length, R = 42, sz = seatSize(n);
+  members.forEach((m,i)=>{
+    const a = (-90 + i*360/n) * Math.PI/180;
+    const x = 50 + R*Math.cos(a), y = 50 + R*Math.sin(a);
+    const seat = document.createElement('div');
+    seat.className = 'seat' + (m.speaking?' speaking':'');
+    seat.style.left = x+'%'; seat.style.top = y+'%';
+    seat.innerHTML = `
+      <div class="seatAvatar" style="width:${sz}px;height:${sz}px;font-size:${sz*0.36}px;background:${m.avatar?'#000':pickColor(m.name)};">
+        ${m.avatar?`<img src="${m.avatar}">`:m.name[0]}
+        ${m.host?`<span class="seatHost"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M3 8l4 4 5-6 5 6 4-4v9H3z"/></svg></span>`:''}
+        ${m.raised?`<span class="seatHand">✋</span>`:''}
+        <span class="seatMic ${m.mic?'':'off'}">${m.mic?micSvg():micOffSvg()}</span>
+      </div>
+      <div class="seatName">${m.name}${m.host?' <span style="color:#fcd34d;">·主持人</span>':''}</div>`;
+    seat.onclick = ()=>simSpeak(m.id);
+    wrap.appendChild(seat);
+  });
+}
+
+/* ============ 参会列表（全屏网格） ============ */
+function renderGrid(){
+  document.getElementById('gridMembers').innerHTML = members.map(m=>`
+    <div class="gcard ${m.speaking?'speaking':''}" onclick="simSpeak('${m.id}')">
+      <div class="gav" style="background:${m.avatar?'#000':pickColor(m.name)};">${m.avatar?`<img src="${m.avatar}">`:m.name[0]}</div>
+      <div class="gname">${m.name} ${m.host?'<span class="hostbadge">👑主持人</span>':''} ${m.raised?'<span class="handbadge">✋举手</span>':''}</div>
+      <div style="font-size:11px;color:#94a3b8;">${m.role==='teacher'?'老师':'学生'} · ${m.mic?'🎙️ 开麦':'🔇 静音'}</div>
+    </div>`).join('');
+}
+
+/* ============ 右侧栏成员列表 ============ */
+function renderSide(){
+  const host = members.filter(m=>m.host), rest = members.filter(m=>!m.host);
+  const row = m=>`
+    <div class="member ${m.speaking?'speaking':''} ${m.raised?'raised':''}">
+      <div class="mav" style="background:${m.avatar?'#000':pickColor(m.name)};">${m.avatar?`<img src="${m.avatar}">`:m.name[0]}</div>
+      <div class="minfo">
+        <div class="mname">${m.name}${m.self?'（我）':''} ${m.host?'<span class="hostbadge">👑主持人</span>':''} ${m.raised?'<span class="handbadge">✋ 举手</span>':''}</div>
+        <div class="mrole">${m.role==='teacher'?'老师':'学生'}</div>
+      </div>
+      <div class="micons">
+        ${m.raised?`<button class="callbtn" onclick="designate('${m.id}',event)">邀请发言</button>`:''}
+        <span class="micdot ${m.mic?'':'off'}">${m.mic?micSvg():micOffSvg()}</span>
+      </div>
+    </div>`;
+  document.getElementById('hostList').innerHTML = host.map(row).join('') || '<div style="font-size:12px;color:#94a3b8;padding:4px;">—</div>';
+  document.getElementById('memberList').innerHTML = rest.map(row).join('');
+  const rc = members.filter(m=>m.raised).length;
+  const badge = document.getElementById('raiseCount');
+  badge.style.display = rc? 'flex':'none'; badge.textContent = rc;
+  document.getElementById('pcount').textContent = members.length;
+}
+
+/* ============ ② 模拟发言：切主位 + 高亮 ============ */
+function simSpeak(id){
+  if(!id){ const c = members.filter(m=>!m.self); id = c[Math.floor(Math.random()*c.length)].id; }
+  members.forEach(m=>m.speaking=false);
+  const spk = members.find(m=>m.id===id); spk.speaking = true;
+  const banner = document.getElementById('speakerBanner');
+  if(annoOn){
+    banner.classList.remove('show'); // 标注中不切主位，仅高亮
+    toast(`标注模式开启中：${spk.name} 发言仅高亮，不切主位`,'warn');
+  } else {
+    document.getElementById('spkName').textContent = spk.name;
+    banner.classList.add('show');
+    document.getElementById('mainLabel').textContent = `主画面 · ${spk.name}（自动切换）`;
+    clearTimeout(speakingTimer);
+    speakingTimer = setTimeout(()=>banner.classList.remove('show'), 2200);
+  }
+  refresh();
+}
+
+/* ============ ② 动态主持人 ============ */
+function teacherJoin(){
+  if(members.some(m=>m.id==='t1')){ toast('老师已在会议中','warn'); return; }
+  const oldHost = members.find(m=>m.host); if(oldHost) oldHost.host=false;
+  members.unshift({id:'t1', name:'王老师', role:'teacher', avatar:avatarTeacher, mic:true, raised:false, speaking:false, host:true});
+  document.getElementById('hostName').textContent='王老师';
+  toast('👑 老师进入会议，已自动接任主持人（原主持人降级）','ok');
+  refresh();
+}
+function teacherLeave(){
+  const t = members.find(m=>m.id==='t1'); if(!t){ toast('老师不在会议中','warn'); return; }
+  members = members.filter(m=>m.id!=='t1');
+  // 切给在场最早加入者（数组首位非自己优先）
+  members.forEach(m=>m.host=false);
+  members[0].host = true;
+  document.getElementById('hostName').textContent = members[0].name;
+  toast(`👑 老师已下线，${members[0].name}（最早加入者）接任主持人`,'warn');
+  refresh();
+}
+
+/* ============ ③ 举手 / 点名 ============ */
+function simRaise(){
+  const c = members.filter(m=>!m.raised && !m.host && !m.self);
+  if(!c.length){ toast('没有可举手的参会者','warn'); return; }
+  const m = c[Math.floor(Math.random()*c.length)]; m.raised = true;
+  toast(`✋ ${m.name} 举起了手`,'brand'); refresh();
+}
+function toggleHand(){
+  const me = members.find(m=>m.self); me.raised = !me.raised;
+  document.getElementById('tHand').classList.toggle('active', me.raised);
+  document.getElementById('tHand').classList.toggle('hasDot', me.raised);
+  toast(me.raised?'你举起了手，等待主持人点名':'你放下了手', me.raised?'brand':'ok'); refresh();
+}
+function designate(id, ev){
+  ev.stopPropagation();
+  const m = members.find(m=>m.id===id);
+  m.raised=false; m.mic=true;
+  toast(`🎙️ 已邀请 ${m.name} 发言，对方麦克风自动开启`,'ok'); refresh();
+}
+
+/* ============ ④ 远程控制 ============ */
+function rcRespond(allow){
+  document.getElementById('rcModal').classList.remove('show');
+  if(allow){ document.getElementById('rcBar').classList.add('show'); toast('已授权远程控制，本地控制代理已建立会话','ok'); }
+  else toast('已拒绝远程控制请求','warn');
+}
+function rcStop(){ document.getElementById('rcBar').classList.remove('show'); toast('已终止远程控制（Ctrl+Alt+Esc）','warn'); }
+
+/* ============ 其它 ============ */
+function toggleAnno(){
+  annoOn = !annoOn;
+  document.getElementById('annoHint').classList.toggle('show', annoOn);
+  if(annoOn) document.getElementById('speakerBanner').classList.remove('show');
+  toast(annoOn?'✏️ 标注模式开启：自动切主位已暂停':'标注模式关闭：恢复自动切主位', annoOn?'warn':'ok');
+}
+function toggleRound(){
+  const target = view==='round' ? 'video' : 'round';
+  setView(target, document.querySelector(`[data-view="${target}"]`));
+  toast(target==='round'?'已进入同框圆桌模式':'已退出同框，回到视频模式','brand');
+}
+function setTab(btn, t){ document.querySelectorAll('.tab').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  document.getElementById('sideBody').style.display = t==='members'?'block':'block';
+  if(t!=='members') toast('原型仅演示「成员」面板','brand');
+}
+function pickColor(name){ let h=0; for(const c of name) h=(h*31+c.charCodeAt(0))>>>0; return palette[h%palette.length]; }
+function micSvg(){return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';}
+function micOffSvg(){return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M2 2l20 20M9 5v6a3 3 0 0 0 5.2 2M15 9V5a3 3 0 0 0-5.7-1.3M5 11a7 7 0 0 0 11 5.5M12 18v3"/></svg>';}
+
+let toastTimer=[];
+function toast(msg, kind){
+  const t = document.createElement('div'); toast.className='toast'; toast.className = `toast ${kind||''}`;
+  toast.innerHTML = msg;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .4s'; setTimeout(()=>t.remove(),300); }, 2800);
+}
+
+function refresh(){ renderSeats(); renderGrid(); renderSide(); renderMinimap(); }
+
+/* 初始化 */
+setView('round', document.querySelector('[data-view="round"]'));
+renderSide();
+</script>
+</body>
+</html>

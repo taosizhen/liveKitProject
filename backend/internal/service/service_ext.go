@@ -326,6 +326,11 @@ func NewUserAdminService(userRepo *repository.UserRepository, cfg *config.Config
 	return &UserAdminService{userRepo: userRepo, cfg: cfg}
 }
 
+// UpdateAvatarURL 更新指定用户的头像访问路径（写入 user.avatar_url）
+func (s *UserAdminService) UpdateAvatarURL(userID, avatarURL string) error {
+	return s.userRepo.Update(userID, map[string]interface{}{"avatar_url": avatarURL})
+}
+
 // CreateUserRequest 管理员创建用户
 type CreateUserRequest struct {
 	Email    string `json:"email" binding:"required,email"`

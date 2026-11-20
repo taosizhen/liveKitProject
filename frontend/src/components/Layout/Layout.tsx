@@ -1,6 +1,7 @@
 // 应用主 Layout：侧边栏 + 顶部导航 + 内容区域
+import { useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Home, CalendarDays, Video, LogOut, UserCircle, Users } from 'lucide-react';
+import { Home, CalendarDays, Video, LogOut, UserCircle, Users, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 
 const navItems = [
@@ -11,7 +12,27 @@ const navItems = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout } = useAuthStore();
+  const { user, logout, uploadAvatar } = useAuthStore();
+
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+
+  /** 选择图片后上传头像 */
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // 允许重复选择同一文件
+    if (!file) return;
+    setAvatarError(null);
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar(file);
+    } catch (err) {
+      setAvatarError((err as Error).message);
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   const roleBadge: Record<string, string> = {
     admin: 'badge-danger',
@@ -71,9 +92,31 @@ export default function Layout() {
         {/* 用户信息 */}
         <div className="border-t border-slate-100 p-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-              <UserCircle className="w-5 h-5 text-slate-400" />
-            </div>
+            {/* 头像：点击可上传更换（/storage 由 Vite 代理到后端） */}
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              title="点击更换头像"
+              className="relative w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden shrink-0 group"
+            >
+              {avatarUploading ? (
+                <Loader2 className="w-4 h-4 text-slate-400 animate-spin" />
+              ) : user?.avatar_url ? (
+                <img src={user.avatar_url} alt="头像" className="w-full h-full object-cover" />
+              ) : (
+                <UserCircle className="w-5 h-5 text-slate-400" />
+              )}
+              <span className="absolute inset-0 bg-black/30 text-white text-[10px] hidden group-hover:flex items-center justify-center">
+                更换
+              </span>
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-slate-800 truncate">
                 {user?.name || '未登录'}
@@ -81,6 +124,7 @@ export default function Layout() {
               <div className="text-xs text-slate-500 truncate">{user?.email}</div>
             </div>
           </div>
+          {avatarError && <div className="mt-2 text-xs text-red-500 truncate">{avatarError}</div>}
           {user && (
             <div className="mt-3 flex items-center justify-between">
               <span className={`${roleBadge[user.role] || 'badge-gray'} capitalize`}>

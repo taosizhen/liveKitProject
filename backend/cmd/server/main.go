@@ -90,7 +90,7 @@ func main() {
 	recordingHandler := handler.NewRecordingHandler(recordingService)
 	materialHandler := handler.NewMaterialHandler(materialService, storageSvc)
 	chatHandler := handler.NewChatHandler(hubManager, chatService)
-	userHandler := handler.NewUserHandler(userAdminService)
+	userHandler := handler.NewUserHandler(userAdminService, storageSvc)
 
 	// 10. Router
 	r := setupRouter(cfg, jwtSigner, authHandler, meetingHandler, livekitHandler,
@@ -216,6 +216,9 @@ func setupRouter(
 			users.PATCH("/:id", userHandler.UpdateRoleOrStatus)
 			users.DELETE("/:id", userHandler.Delete)
 		}
+
+		// 当前用户自助：头像上传（登录即可，不走 admin 校验；独立 /profile 避免与 /users/:id 通配冲突）
+		protected.POST("/profile/avatar", userHandler.UploadAvatar)
 
 		// 用户建议列表（所有登录用户可查，用于会议邀请）
 		protected.GET("/users/suggest", handler.SuggestUsers)

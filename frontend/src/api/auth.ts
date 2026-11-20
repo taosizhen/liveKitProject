@@ -23,6 +23,15 @@ export function refresh(refreshToken: string) {
 /** 获取当前用户信息 */
 export function me() {
   return http.get('/auth/me') as unknown as Promise<
-    ApiResponse<{ id: string; email: string; name: string; role: string }>
+    ApiResponse<{ id: string; email: string; name: string; role: string; avatar_url?: string }>
   >;
+}
+
+/** 上传当前用户头像（multipart 字段名 file），返回新的头像访问路径 */
+export function uploadAvatar(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  return http.post('/profile/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }) as unknown as Promise<ApiResponse<{ avatar_url: string }>>;
 }

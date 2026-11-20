@@ -46,12 +46,15 @@ func (h *LiveKitHandler) GetJoinToken(c *gin.Context) {
 	// 2. 标记用户加入会议
 	_ = h.meetingService.JoinMeeting(claims.UserID, meetingID)
 
-	// 3. 生成 LiveKit Token
+	// 3. 生成 LiveKit Token（metadata 携带角色与头像，供会议内动态主持人判定与头像显示）
 	canPublish, canRecord := livekitutil.GetParticipantPermission(claims.Role)
+	avatarURL := h.meetingService.GetUserAvatarURL(claims.UserID)
 	token, err := h.livekitSvc.GenerateJoinToken(
 		meeting.RoomName,
 		claims.UserID,
 		claims.Name,
+		claims.Role,
+		avatarURL,
 		canPublish,
 		canRecord,
 	)

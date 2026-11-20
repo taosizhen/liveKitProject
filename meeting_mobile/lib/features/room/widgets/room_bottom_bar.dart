@@ -8,9 +8,12 @@ class RoomBottomBar extends StatelessWidget {
     super.key,
     required this.state,
     required this.annotationMode,
+    required this.handRaised,
     required this.onToggleMic,
     required this.onToggleCamera,
     required this.onToggleScreenShare,
+    required this.onToggleFollowSpeaker,
+    required this.onToggleHand,
     required this.onToggleChat,
     required this.onToggleMembers,
     required this.onToggleAnnotation,
@@ -21,9 +24,18 @@ class RoomBottomBar extends StatelessWidget {
 
   /// 是否正处于标注模式（按钮高亮）
   final bool annotationMode;
+
+  /// 自己是否举手中（来自 SignalController，按钮高亮）
+  final bool handRaised;
   final VoidCallback onToggleMic;
   final VoidCallback onToggleCamera;
   final VoidCallback onToggleScreenShare;
+
+  /// 切换"跟随发言人"（语音活动自动切主位）
+  final VoidCallback onToggleFollowSpeaker;
+
+  /// 举手 / 放下手（是否举手中由 state.handRaised 决定）
+  final VoidCallback onToggleHand;
   final VoidCallback onToggleChat;
   final VoidCallback onToggleMembers;
   final VoidCallback onToggleAnnotation;
@@ -62,6 +74,20 @@ class RoomBottomBar extends StatelessWidget {
               active: state.screenSharing,
               label: '共享',
               onTap: onToggleScreenShare,
+            ),
+            _iconButton(
+              icon: state.followSpeaker
+                  ? Icons.volume_up_rounded
+                  : Icons.volume_off_rounded,
+              active: state.followSpeaker,
+              label: '跟随',
+              onTap: onToggleFollowSpeaker,
+            ),
+            _iconButton(
+              icon: Icons.back_hand_rounded,
+              active: handRaised,
+              label: handRaised ? '放下手' : '举手',
+              onTap: onToggleHand,
             ),
             _iconButton(
               icon: Icons.chat_bubble_outline_rounded,

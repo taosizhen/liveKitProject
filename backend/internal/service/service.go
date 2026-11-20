@@ -143,6 +143,11 @@ func (s *AuthService) Refresh(refreshToken string) (*TokenPair, error) {
 	}, nil
 }
 
+// GetUserByID 按 ID 查询用户（含头像，用于 auth/me 返回最新资料）
+func (s *AuthService) GetUserByID(userID string) (*model.User, error) {
+	return s.userRepo.FindByID(userID)
+}
+
 // ============================================================
 // MeetingService 会议业务
 // ============================================================
@@ -174,6 +179,15 @@ func NewMeetingService(
 		storage:     st,
 		notifier:    notifier,
 	}
+}
+
+// GetUserAvatarURL 返回用户头像访问路径，无头像时返回空串（供 LiveKit token metadata 使用）
+func (s *MeetingService) GetUserAvatarURL(userID string) string {
+	u, err := s.userRepo.FindByID(userID)
+	if err != nil || u == nil || u.AvatarURL == nil {
+		return ""
+	}
+	return *u.AvatarURL
 }
 
 // CreateMeetingRequest 创建会议请求

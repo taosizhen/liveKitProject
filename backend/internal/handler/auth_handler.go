@@ -32,10 +32,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 	response.Created(c, gin.H{
-		"id":    user.ID,
-		"email": user.Email,
-		"name":  user.Name,
-		"role":  user.RoleName,
+		"id":         user.ID,
+		"email":      user.Email,
+		"name":       user.Name,
+		"role":       user.RoleName,
+		"avatar_url": user.AvatarURL,
 	})
 }
 
@@ -54,10 +55,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response.OK(c, gin.H{
 		"tokens": tokens,
 		"user": gin.H{
-			"id":    user.ID,
-			"email": user.Email,
-			"name":  user.Name,
-			"role":  user.RoleName,
+			"id":         user.ID,
+			"email":      user.Email,
+			"name":       user.Name,
+			"role":       user.RoleName,
+			"avatar_url": user.AvatarURL,
 		},
 	})
 }
@@ -86,10 +88,17 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		response.Unauthorized(c, "unauthorized")
 		return
 	}
+	// 查库取最新头像（JWT 中不携带 avatar）
+	user, err := h.authService.GetUserByID(claims.UserID)
+	if err != nil {
+		response.NotFound(c, "user")
+		return
+	}
 	response.OK(c, gin.H{
-		"id":    claims.UserID,
-		"email": claims.Email,
-		"name":  claims.Name,
-		"role":  claims.Role,
+		"id":         claims.UserID,
+		"email":      claims.Email,
+		"name":       claims.Name,
+		"role":       claims.Role,
+		"avatar_url": user.AvatarURL,
 	})
 }

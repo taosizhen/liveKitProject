@@ -6,7 +6,7 @@ import { tokenStorage } from '@/api/http';
 import type { RoleName } from '@/types';
 
 interface AuthState {
-  user: { id: string; email: string; name: string; role: RoleName } | null;
+  user: { id: string; email: string; name: string; role: RoleName; avatar_url?: string } | null;
   loading: boolean;
   error: string | null;
 
@@ -14,6 +14,8 @@ interface AuthState {
   register: (data: { email: string; password: string; name: string; role?: string }) => Promise<void>;
   logout: () => void;
   clearError: () => void;
+  /** 上传并更新当前用户头像 */
+  uploadAvatar: (file: File) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -62,6 +64,14 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearError: () => set({ error: null }),
+
+      /** 上传头像：调用后端接口后同步更新本地 user.avatar_url */
+      uploadAvatar: async (file) => {
+        const resp = await authApi.uploadAvatar(file);
+        const url = resp.data?.avatar_url;
+        if (!url) throw new Error('上传失败');
+        set((s) => (s.user ? { user: { ...s.user, avatar_url: url } } : {}));
+      },
     }),
     {
       name: 'auth-store',

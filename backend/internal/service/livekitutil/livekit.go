@@ -2,6 +2,7 @@
 package livekitutil
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -24,14 +25,15 @@ func NewService(cfg *config.LiveKitConfig) *Service {
 // roomName: LiveKit Room 名
 // userID:   平台用户 ID（也是 LiveKit participant identity）
 // userName: 显示名
+// role:     平台角色（admin/teacher/student），写入 metadata 供会议内动态主持人判定
+// avatarURL: 头像访问路径，写入 metadata 供会议内席位/成员列表显示真实头像
 // canPublish: 是否允许发布媒体流
 // roomRecord: 是否允许录制房间（使用 LiveKit RoomRecord grant）
-func (s *Service) GenerateJoinToken(roomName, userID, userName string, canPublish, roomRecord bool) (string, error) {
+func (s *Service) GenerateJoinToken(roomName, userID, userName, role, avatarURL string, canPublish, roomRecord bool) (string, error) {
 	if s.cfg.APIKey == "" || s.cfg.APISecret == "" {
 		return "", fmt.Errorf("livekit credentials not configured")
 	}
 
-	now := time.Now()
 	validDuration := 24 * time.Hour
 
 	grant := &auth.VideoGrant{
@@ -45,13 +47,15 @@ func (s *Service) GenerateJoinToken(roomName, userID, userName string, canPublis
 		grant.CanPublish = &val
 	}
 
+	// metadata 携带角色与头像，房间内各端据此做动态主持人判定与头像显示
+	metadata, _ := json.Marshal(map[string]string{"role": role, "avatar_url": avatarURL})
+
 	token := auth.NewAccessToken(s.cfg.APIKey, s.cfg.APISecret).
 		SetIdentity(userID).
 		SetName(userName).
+		SetMetadata(string(metadata)).
 		SetValidFor(validDuration).
 		SetVideoGrant(grant)
-
-	_ = now // 避免未使用
 
 	return token.ToJWT()
 }

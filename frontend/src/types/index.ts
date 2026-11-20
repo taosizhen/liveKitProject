@@ -40,6 +40,7 @@ export interface LoginResult {
     email: string;
     name: string;
     role: RoleName;
+    avatar_url?: string;
   };
 }
 

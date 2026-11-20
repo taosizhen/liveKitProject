@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/token_pair.dart';
@@ -62,6 +63,30 @@ class AuthRepository {
 
   /// 退出登录（后端暂无吊销接口，先清本地；Phase 2 接 logout + Redis 黑名单）
   Future<void> logout() => _tokens.clear();
+
+  /// 上传当前用户头像（multipart 字段名 file）
+  ///
+  /// 成功后回写本地用户缓存并返回更新后的用户；头像在下次入会通过
+  /// token metadata 同步给会议内其他端。
+  Future<AppUser> uploadAvatar(AppUser current, String filePath) async {
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath),
+    });
+    final data = await _api.postJson('/profile/avatar', data: form);
+    if (data is! Map<String, dynamic> ||
+        (data['avatar_url'] as String?)?.isEmpty != false) {
+      throw ApiException('头像上传响应格式异常');
+    }
+    final updated = AppUser(
+      id: current.id,
+      email: current.email,
+      name: current.name,
+      role: current.role,
+      avatarUrl: data['avatar_url'] as String,
+    );
+    await _tokens.saveUser(updated);
+    return updated;
+  }
 }
 
 /// 鉴权仓库 Provider

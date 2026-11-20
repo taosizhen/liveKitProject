@@ -1,17 +1,51 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../config/app_config.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../auth/auth_controller.dart';
 
 /// 我的页面
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen> {
+  final _picker = ImagePicker();
+  bool _avatarUploading = false;
+
+  /// 从相册选图并上传头像
+  Future<void> _pickAndUploadAvatar() async {
+    if (_avatarUploading) return;
+    final picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+
+    setState(() => _avatarUploading = true);
+    final ok = await ref
+        .read(authControllerProvider.notifier)
+        .uploadAvatar(picked.path);
+    if (!mounted) return;
+    setState(() => _avatarUploading = false);
+    if (!ok) {
+      final err = ref.read(authControllerProvider).error ?? '头像上传失败';
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err)));
+      ref.read(authControllerProvider.notifier).clearError();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     final user = auth.user;
     final config = ref.watch(appConfigProvider);
@@ -30,7 +64,36 @@ class ProfileScreen extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                UserAvatar(user: user, size: 56),
+                // 头像：点击更换
+                GestureDetector(
+                  onTap: _pickAndUploadAvatar,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      UserAvatar(user: user, size: 56),
+                      if (_avatarUploading)
+                        const SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      else
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF6366F1),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit,
+                                size: 12, color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(

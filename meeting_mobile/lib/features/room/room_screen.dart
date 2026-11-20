@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
 
 import 'room_controller.dart';
+import 'signal_controller.dart';
 import 'widgets/annotation_canvas.dart';
 import 'widgets/annotation_toolbar.dart';
 import 'widgets/chat_panel.dart';
 import 'widgets/members_panel.dart';
 import 'widgets/room_bottom_bar.dart';
+import 'widgets/roundtable_view.dart';
 import 'widgets/thumbnail_strip.dart';
 
 /// 会议室页面
@@ -33,6 +35,9 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   bool _annotating = false;
   bool _showChat = false;
   bool _showMembers = false;
+
+  /// 同框圆桌：true=圆桌全屏/成员小地图；false=舞台全屏/圆桌小地图
+  bool _roundTableMain = false;
 
   // 进入标注前的面板状态，退出时还原
   bool _chatBeforeAnnotation = false;
@@ -80,6 +85,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       _showMembers = false;
       _annotating = true;
     });
+    _roomController.setAnnotationMode(true);
   }
 
   /// 退出标注模式：恢复进入前的布局
@@ -89,6 +95,7 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
       _showChat = _chatBeforeAnnotation;
       _showMembers = _membersBeforeAnnotation;
     });
+    _roomController.setAnnotationMode(false);
   }
 
   /// 点击标注按钮
@@ -121,6 +128,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(roomControllerProvider(widget.meetingId));
+    final signalState = ref.watch(signalControllerProvider(widget.meetingId));
+
+    // 本地成员信息（供举手/点名使用）
+    final localMember = state.members.where((m) => m.isLocal).firstOrNull;
+    final localIdentity = localMember?.identity ?? '';
+    final isHost = localMember?.isHost ?? false;
+    final handRaised = signalState.hands.containsKey(localIdentity);
 
     // 一次性错误提示
     ref.listen<RoomState>(roomControllerProvider(widget.meetingId),
@@ -131,6 +145,21 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
         ref
             .read(roomControllerProvider(widget.meetingId).notifier)
             .clearError();
+      }
+    });
+
+    // 被点名 / 点名回执的一次性提示
+    ref.listen<SignalState>(signalControllerProvider(widget.meetingId),
+        (previous, next) {
+      final notice = next.designateNotice ?? next.designateAckNotice;
+      final prevNotice =
+          previous?.designateNotice ?? previous?.designateAckNotice;
+      if (notice != null && notice != prevNotice) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(notice)));
+        ref
+            .read(signalControllerProvider(widget.meetingId).notifier)
+            .clearNotices();
       }
     });
 
@@ -150,10 +179,20 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   Expanded(child: _buildStage(state)),
                   // 标注模式下隐藏缩略图（其他人画面）
                   if (!_annotating && state.thumbnails.isNotEmpty)
-                    ThumbnailStrip(videos: state.thumbnails),
+                    ThumbnailStrip(
+                      videos: state.thumbnails,
+                      hostIdentity: state.hostIdentity,
+                      activeSpeakerId: state.activeSpeakerId,
+                      pinnedIdentity: state.pinnedIdentity,
+                      onTapVideo: (identity) => ref
+                          .read(
+                              roomControllerProvider(widget.meetingId).notifier)
+                          .togglePin(identity),
+                    ),
                   RoomBottomBar(
                     state: state,
                     annotationMode: _annotating,
+                    handRaised: handRaised,
                     onToggleMic: () => ref
                         .read(roomControllerProvider(widget.meetingId).notifier)
                         .toggleMicrophone(),
@@ -163,6 +202,18 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                     onToggleScreenShare: () => ref
                         .read(roomControllerProvider(widget.meetingId).notifier)
                         .toggleScreenShare(),
+                    onToggleFollowSpeaker: () => ref
+                        .read(roomControllerProvider(widget.meetingId).notifier)
+                        .toggleFollowSpeaker(),
+                    onToggleHand: () {
+                      final signal = ref.read(
+                          signalControllerProvider(widget.meetingId).notifier);
+                      if (handRaised) {
+                        signal.lowerHand();
+                      } else {
+                        signal.raiseHand();
+                      }
+                    },
                     onToggleChat: () => setState(() => _showChat = !_showChat),
                     onToggleMembers: () =>
                         setState(() => _showMembers = !_showMembers),
@@ -184,6 +235,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                       ),
                       MembersPanel(
                         members: state.members,
+                        raisedHands: signalState.raisedHands,
+                        isHost: isHost,
+                        localIdentity: localIdentity,
+                        onDesignate: (identity) => ref
+                            .read(signalControllerProvider(widget.meetingId)
+                                .notifier)
+                            .designate(identity),
                         onClose: () => setState(() => _showMembers = false),
                       ),
                     ],
@@ -245,6 +303,24 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   Icon(Icons.edit_rounded, size: 12, color: Colors.white),
                   SizedBox(width: 4),
                   Text('标注模式 · 单画面',
+                      style: TextStyle(fontSize: 10, color: Colors.white)),
+                ],
+              ),
+            ),
+          // 自己是主持人时显示徽标
+          if (state.members.any((m) => m.isLocal && m.isHost))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: const Color(0xFF92400E),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.workspace_premium_rounded,
+                      size: 12, color: Color(0xFFFBBF24)),
+                  SizedBox(width: 4),
+                  Text('主持人',
                       style: TextStyle(fontSize: 10, color: Colors.white)),
                 ],
               ),
@@ -312,6 +388,28 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                 ),
               ),
             ),
+          // 同框圆桌：圆桌 ⇄ 成员列表 互为右下角小地图，点击互换
+          if (!_annotating) ...[
+            if (_roundTableMain)
+              Positioned.fill(
+                child: RoundTableView(meetingId: widget.meetingId),
+              ),
+            Positioned(
+              right: 10,
+              bottom: 30,
+              child: _roundTableMain
+                  ? MiniMemberList(
+                      members: state.members,
+                      onTap: () =>
+                          setState(() => _roundTableMain = false),
+                    )
+                  : RoundTableView(
+                      meetingId: widget.meetingId,
+                      mini: true,
+                      onTap: () => setState(() => _roundTableMain = true),
+                    ),
+            ),
+          ],
         ],
       ),
     );

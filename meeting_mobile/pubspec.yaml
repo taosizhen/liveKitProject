@@ -30,6 +30,8 @@ dependencies:
   wakelock_plus: ^1.2.5
   # 时间格式化
   intl: ^0.19.0
+  # 相册/相机选图（头像上传）
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:

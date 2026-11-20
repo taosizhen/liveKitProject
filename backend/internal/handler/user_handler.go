@@ -1,20 +1,63 @@
 package handler
 
 import (
+	"fmt"
 	"meeting-platform/internal/middleware"
 	"meeting-platform/internal/service"
+	"meeting-platform/pkg/response"
+	"meeting-platform/pkg/storage"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-// UserHandler 管理员用户管理
+// UserHandler 管理员用户管理 + 当前用户自助（头像上传）
 type UserHandler struct {
-	svc *service.UserAdminService
+	svc     *service.UserAdminService
+	storage *storage.Service
 }
 
 // NewUserHandler 创建
-func NewUserHandler(svc *service.UserAdminService) *UserHandler { return &UserHandler{svc: svc} }
+func NewUserHandler(svc *service.UserAdminService, st *storage.Service) *UserHandler {
+	return &UserHandler{svc: svc, storage: st}
+}
+
+// UploadAvatar POST /api/v1/profile/avatar —— 当前用户上传头像（登录即可，非 admin）
+// multipart 字段名为 file；存到 storage 的 avatars 子目录，并回写 user.avatar_url
+func (h *UserHandler) UploadAvatar(c *gin.Context) {
+	claims := middleware.GetClaims(c)
+	if claims == nil {
+		response.Unauthorized(c, "unauthorized")
+		return
+	}
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		response.BadRequest(c, "file required")
+		return
+	}
+	file.Close() // 由 storage.Save 内部重新打开
+
+	// 仅允许常见图片格式
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	if !map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".gif": true}[ext] {
+		response.BadRequest(c, "only jpg/jpeg/png/webp/gif allowed")
+		return
+	}
+
+	rel, _, err := h.storage.Save("avatars", header)
+	if err != nil {
+		response.ServerError(c, fmt.Errorf("save avatar: %w", err))
+		return
+	}
+	url := "/storage/" + rel
+	if err := h.svc.UpdateAvatarURL(claims.UserID, url); err != nil {
+		response.ServerError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"avatar_url": url})
+}
 
 // Create POST /api/v1/users —— 管理员创建账号
 func (h *UserHandler) Create(c *gin.Context) {
