@@ -16,6 +16,8 @@ interface AuthState {
   clearError: () => void;
   /** 上传并更新当前用户头像 */
   uploadAvatar: (file: File) => Promise<void>;
+  /** 修改当前用户昵称 */
+  updateName: (name: string) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -71,6 +73,14 @@ export const useAuthStore = create<AuthState>()(
         const url = resp.data?.avatar_url;
         if (!url) throw new Error('上传失败');
         set((s) => (s.user ? { user: { ...s.user, avatar_url: url } } : {}));
+      },
+
+      /** 修改昵称：调用后端接口后同步更新本地 user.name */
+      updateName: async (name) => {
+        const resp = await authApi.updateName(name);
+        const newName = resp.data?.name;
+        if (!newName) throw new Error('修改失败');
+        set((s) => (s.user ? { user: { ...s.user, name: newName } } : {}));
       },
     }),
     {

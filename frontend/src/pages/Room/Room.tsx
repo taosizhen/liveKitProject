@@ -197,7 +197,10 @@ function RoomContent({ meetingID, meetingTitle, roomName, onLeave }: RoomContent
   const [roundTableMain, setRoundTableMain] = useState(false); // true=圆桌全屏/列表小地图
 
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare], { onlySubscribed: false });
-  const screenShareTrack = tracks.find((t) => t.source === Track.Source.ScreenShare);
+  // 屏幕共享：远端优先，其次本地（与 App 端选取规则一致，避免两端主画面不一致）
+  const remoteScreenShareTrack = tracks.find((t) => t.source === Track.Source.ScreenShare && !t.participant.isLocal);
+  const localScreenShareTrack = tracks.find((t) => t.source === Track.Source.ScreenShare && t.participant.isLocal);
+  const screenShareTrack = remoteScreenShareTrack ?? localScreenShareTrack;
   const localCameraTrack = tracks.find((t) => t.source === Track.Source.Camera && t.participant.isLocal);
   const remoteCameraTrack = tracks.find((t) => t.source === Track.Source.Camera && !t.participant.isLocal);
   const cameraTracks = useMemo(() => tracks.filter((t) => t.source === Track.Source.Camera), [tracks]);
@@ -492,7 +495,7 @@ function RoomContent({ meetingID, meetingTitle, roomName, onLeave }: RoomContent
           )}
 
           {/* 标注层（静态标记 / 激光笔 / 白板，含画布） */}
-          <AnnotationLayer ref={annotationRef} enabled={annotating} onExit={() => setAnnotating(false)} />
+          <AnnotationLayer ref={annotationRef} enabled={annotating} onExit={() => setAnnotating(false)} getVideoElement={getVideoElement} />
 
           {/* 主持人切换提示 */}
           {hostNotice && (

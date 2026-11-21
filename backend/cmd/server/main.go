@@ -118,11 +118,29 @@ func main() {
 		}
 	}()
 
+	// 13. 本地回环 HTTP 监听（可选）
+	// 背景：Vite 开发服务器以 HTTPS 运行时，其代理转发到 HTTPS 上游会挂起，
+	// 故在启用 HTTPS 的场景下额外暴露一个仅 127.0.0.1 可达的 HTTP 端口供代理使用
+	var localSrv *http.Server
+	if cfg.App.HTTPPort > 0 && cfg.App.TLSCert != "" && cfg.App.TLSKey != "" {
+		localAddr := fmt.Sprintf("127.0.0.1:%d", cfg.App.HTTPPort)
+		localSrv = &http.Server{Addr: localAddr, Handler: r}
+		go func() {
+			log.Printf("[HTTP] Loopback HTTP listener on http://%s (for local dev proxy)\n", localAddr)
+			if err := localSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("[WARN] loopback http run: %v\n", err)
+			}
+		}()
+	}
+
 	// 优雅关闭
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	cancel()
+	if localSrv != nil {
+		_ = localSrv.Close()
+	}
 	log.Println("[INFO] Server shutting down...")
 }
 
@@ -219,6 +237,7 @@ func setupRouter(
 
 		// 当前用户自助：头像上传（登录即可，不走 admin 校验；独立 /profile 避免与 /users/:id 通配冲突）
 		protected.POST("/profile/avatar", userHandler.UploadAvatar)
+		protected.PATCH("/profile/name", userHandler.UpdateName)
 
 		// 用户建议列表（所有登录用户可查，用于会议邀请）
 		protected.GET("/users/suggest", handler.SuggestUsers)

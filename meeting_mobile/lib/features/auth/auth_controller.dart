@@ -118,6 +118,24 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  /// 修改当前用户昵称，返回是否成功
+  Future<bool> updateName(String name) async {
+    final user = state.user;
+    if (user == null) return false;
+    try {
+      final updated =
+          await ref.read(authRepositoryProvider).updateName(user, name);
+      state = state.copyWith(user: updated);
+      return true;
+    } on ApiException catch (e) {
+      state = state.copyWith(error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(error: '昵称修改失败，请稍后重试');
+      return false;
+    }
+  }
+
   /// 登录态失效：清空并跳转登录页
   void _handleAuthLost() {
     state = const AuthState(error: '登录已过期，请重新登录');

@@ -5,6 +5,7 @@ import 'package:livekit_client/livekit_client.dart';
 
 import 'room_controller.dart';
 import 'signal_controller.dart';
+import 'annotation_controller.dart';
 import 'widgets/annotation_canvas.dart';
 import 'widgets/annotation_toolbar.dart';
 import 'widgets/chat_panel.dart';
@@ -339,6 +340,13 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
     );
   }
 
+  /// 标注画布宽高比：白板固定 16:9（跨端一致），否则取主画面视频实际宽高比
+  double _annotationAspect(RoomState state) {
+    final annot = ref.watch(annotationControllerProvider(widget.meetingId));
+    if (annot.whiteboard) return 16 / 9;
+    return state.mainAspect ?? 16 / 9;
+  }
+
   /// 舞台区（主画面 + 标注层）
   Widget _buildStage(RoomState state) {
     if (state.phase != RoomPhase.connected && state.mainTrack == null) {
@@ -360,10 +368,16 @@ class _RoomScreenState extends ConsumerState<RoomScreen>
                   )
                 : _buildEmptyStage(state),
           ),
-          // 标注画布严格铺在主画面矩形之上
+          // 标注画布严格铺在主画面矩形之上：画布按视频宽高比居中 contain，
+          // 与 Web 端归一化坐标基准一致；白板模式固定 16:9 保证跨端对齐
           if (_annotating)
             Positioned.fill(
-              child: AnnotationCanvas(meetingId: widget.meetingId),
+              child: Center(
+                child: AspectRatio(
+                  aspectRatio: _annotationAspect(state),
+                  child: AnnotationCanvas(meetingId: widget.meetingId),
+                ),
+              ),
             ),
           if (_annotating)
             AnnotationToolbar(

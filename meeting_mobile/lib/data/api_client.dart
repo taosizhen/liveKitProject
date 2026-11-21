@@ -208,6 +208,16 @@ class ApiClient {
     }
   }
 
+  /// PATCH 请求，返回统一响应中的 data 字段
+  Future<dynamic> patchJson(String path, {Object? data}) async {
+    try {
+      final response = await _dio.patch(path, data: data);
+      return _unwrap(response);
+    } on DioException catch (e) {
+      throw _toApiException(e);
+    }
+  }
+
   /// 解包 `{code, message, data}`，code != 0 抛业务异常
   dynamic _unwrap(Response<dynamic> response) {
     final body = response.data;

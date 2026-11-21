@@ -331,6 +331,15 @@ func (s *UserAdminService) UpdateAvatarURL(userID, avatarURL string) error {
 	return s.userRepo.Update(userID, map[string]interface{}{"avatar_url": avatarURL})
 }
 
+// UpdateName 当前用户修改昵称（1~50 字符，前后空白自动去除）
+func (s *UserAdminService) UpdateName(userID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 50 {
+		return fmt.Errorf("name must be 1-50 characters")
+	}
+	return s.userRepo.Update(userID, map[string]interface{}{"name": name})
+}
+
 // CreateUserRequest 管理员创建用户
 type CreateUserRequest struct {
 	Email    string `json:"email" binding:"required,email"`

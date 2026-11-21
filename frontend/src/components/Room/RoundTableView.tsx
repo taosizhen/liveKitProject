@@ -8,12 +8,12 @@ import { Crown, Hand, Mic, MicOff } from 'lucide-react';
 import { computeHostIdentity, parseParticipantMeta } from '@/hooks/useDynamicHost';
 import { useSignalStore } from '@/store/signalStore';
 
-/** 圆桌俯视背景图（AI 生成） */
-const ROUND_TABLE_BG =
-  'https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=' +
-  'top-down%20aerial%20view%20of%20an%20elegant%20round%20wooden%20conference%20table%2C%20' +
-  'dark%20walnut%20surface%2C%20empty%20modern%20meeting%20room%2C%20soft%20ambient%20lighting%2C%20' +
-  'photorealistic%2C%20centered%20composition%2C%20dark%20moody%20background&image_size=square_hd';
+/** 圆桌桌面背景：纯 CSS 径向渐变模拟深色木质桌面，避免外链图片在无外网环境下加载失败 */
+const ROUND_TABLE_BG_STYLE: React.CSSProperties = {
+  background:
+    'radial-gradient(circle at 50% 45%, #3d2d1e 0%, #241810 45%, #120b07 78%, #070402 100%)',
+  boxShadow: 'inset 0 0 60px rgba(0,0,0,0.7), inset 0 0 120px rgba(0,0,0,0.4)',
+};
 
 interface RoundTableViewProps {
   /** full=铺满舞台；mini=小地图（点击展开） */
@@ -52,6 +52,7 @@ export default function RoundTableView({ size = 'full', activeSpeakerId, onExpan
 
   const n = participants.length;
   const seat = seatSize(n, mini);
+  const handCount = Object.keys(hands).length;
 
   /** 单个席位（圆周均布） */
   const renderSeat = (p: Participant, i: number) => {
@@ -140,14 +141,19 @@ export default function RoundTableView({ size = 'full', activeSpeakerId, onExpan
     >
       {/* 内部正方形区域：保证圆周百分比定位横纵一致 */}
       <div className="absolute inset-0 m-auto aspect-square h-full max-w-full">
-        <img
-          src={ROUND_TABLE_BG}
-          alt=""
-          draggable={false}
-          className="absolute inset-0 w-full h-full object-cover opacity-80"
+        <div
+          className="absolute inset-0 w-full h-full"
+          style={ROUND_TABLE_BG_STYLE}
         />
         {participants.map(renderSeat)}
       </div>
+      {/* 全屏圆桌：举手人数醒目提示（小地图态不显示，避免遮挡） */}
+      {!mini && handCount > 0 && (
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/90 text-white text-xs shadow-lg">
+          <Hand className="w-3.5 h-3.5" />
+          <span>举手 {handCount} 人</span>
+        </div>
+      )}
       {mini && (
         <span className="absolute bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-black/60 text-[10px] text-white/80">
           同框圆桌

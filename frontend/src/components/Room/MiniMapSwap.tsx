@@ -28,26 +28,29 @@ export default function MiniMapSwap({
   stage,
   hideOverlays = false,
 }: MiniMapSwapProps) {
+  // 标注中强制退回舞台主画面：圆桌与标注互斥，退出标注后自动恢复圆桌全屏
+  const showRoundTable = roundTableMain && !hideOverlays;
+
   return (
     <div className="absolute inset-0">
-      {/* 舞台始终挂载，圆桌全屏时仅视觉隐藏 */}
-      <div className={`absolute inset-0 ${roundTableMain ? 'invisible' : ''}`}>{stage}</div>
+      {/* 舞台始终挂载，圆桌全屏时仅视觉隐藏（标注中即使 roundTableMain=true 也要显示舞台） */}
+      <div className={`absolute inset-0 ${showRoundTable ? 'invisible' : ''}`}>{stage}</div>
 
       {/* 圆桌：全屏 ⇄ 小地图，仅改容器类名与 size prop，组件位置稳定 */}
       <div
-        onClick={roundTableMain || hideOverlays ? undefined : onSwap}
-        title={roundTableMain || hideOverlays ? undefined : '点击展开同框圆桌'}
+        onClick={showRoundTable || hideOverlays ? undefined : onSwap}
+        title={showRoundTable || hideOverlays ? undefined : '点击展开同框圆桌'}
         className={
-          roundTableMain
+          showRoundTable
             ? 'absolute inset-0'
             : `absolute left-3 bottom-3 z-20 ${hideOverlays ? 'hidden' : ''}`
         }
       >
-        {renderRoundTable(roundTableMain ? 'full' : 'mini')}
+        {renderRoundTable(showRoundTable ? 'full' : 'mini')}
       </div>
 
-      {/* 成员列表小地图（仅圆桌全屏时显示，点击切回舞台） */}
-      {roundTableMain && !hideOverlays && (
+      {/* 成员列表小地图（仅圆桌全屏且非标注时显示，点击切回舞台） */}
+      {showRoundTable && (
         <div
           onClick={onSwap}
           title="点击切回主舞台"

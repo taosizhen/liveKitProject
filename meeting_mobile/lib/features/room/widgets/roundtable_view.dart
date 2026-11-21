@@ -59,6 +59,7 @@ class RoundTableView extends ConsumerWidget {
     final n = members.length;
     if (n == 0) return const SizedBox.shrink();
     final seat = _seatSize(n);
+    final handCount = signal.hands.length;
 
     final content = LayoutBuilder(
       builder: (context, constraints) {
@@ -103,6 +104,33 @@ class RoundTableView extends ConsumerWidget {
                 state,
                 signal.hands.containsKey(members[i].identity),
                 apiBaseUrl,
+              ),
+            // 全屏圆桌：举手人数醒目提示（小地图态不显示）
+            if (!mini && handCount > 0)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xE6F59E0B),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.back_hand_rounded,
+                          size: 14, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        '举手 $handCount 人',
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
               ),
           ],
         );

@@ -87,6 +87,24 @@ class AuthRepository {
     await _tokens.saveUser(updated);
     return updated;
   }
+
+  /// 修改当前用户昵称（1~50 字符），成功后回写本地缓存
+  Future<AppUser> updateName(AppUser current, String name) async {
+    final data = await _api.patchJson('/profile/name', data: {'name': name});
+    if (data is! Map<String, dynamic> ||
+        (data['name'] as String?)?.isEmpty != false) {
+      throw ApiException('昵称修改响应格式异常');
+    }
+    final updated = AppUser(
+      id: current.id,
+      email: current.email,
+      name: data['name'] as String,
+      role: current.role,
+      avatarUrl: current.avatarUrl,
+    );
+    await _tokens.saveUser(updated);
+    return updated;
+  }
 }
 
 /// 鉴权仓库 Provider

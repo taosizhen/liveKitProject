@@ -48,6 +48,8 @@ interface Props {
   enabled: boolean;
   /** 退出标注模式 */
   onExit: () => void;
+  /** 获取主画面 video 元素，用于读取视频真实宽高比，使画布与视频显示矩形对齐 */
+  getVideoElement?: () => HTMLVideoElement | null;
 }
 
 const COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#3b82f6', '#a855f7', '#ffffff'];
@@ -118,7 +120,7 @@ function paintStroke(ctx: CanvasRenderingContext2D, s: Stroke, w: number, h: num
 }
 
 const AnnotationLayer = forwardRef<AnnotationLayerHandle, Props>(function AnnotationLayer(
-  { enabled, onExit },
+  { enabled, onExit, getVideoElement },
   ref,
 ) {
   const room = useRoomContext();
@@ -134,6 +136,8 @@ const AnnotationLayer = forwardRef<AnnotationLayerHandle, Props>(function Annota
   const [tool, setTool] = useState<AnnotationTool>('pen');
   const [color, setColor] = useState(COLORS[0]);
   const [whiteboard, setWhiteboard] = useState(false);
+  // 主画面视频真实宽高比（width/height），标注画布据此与视频显示矩形对齐
+  const [videoAspect, setVideoAspect] = useState(16 / 9);
 
   /** 重绘静态标记缓存画布 */
   const redrawCache = useCallback(() => {
@@ -183,6 +187,28 @@ const AnnotationLayer = forwardRef<AnnotationLayerHandle, Props>(function Annota
     syncSize();
     return () => ro.disconnect();
   }, [syncSize]);
+
+  // 监听主画面视频真实尺寸，更新画布宽高比（仅标注期间需要）
+  useEffect(() => {
+    if (!enabled) return;
+    const video = getVideoElement?.();
+    if (!video) return;
+    const update = () => {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      if (w > 0 && h > 0) setVideoAspect(w / h);
+    };
+    update();
+    video.addEventListener('loadedmetadata', update);
+    video.addEventListener('resize', update);
+    // 兜底：部分轨道切换/重订阅时 resize 不触发，定时刷新
+    const timer = window.setInterval(update, 1000);
+    return () => {
+      video.removeEventListener('loadedmetadata', update);
+      video.removeEventListener('resize', update);
+      window.clearInterval(timer);
+    };
+  }, [enabled, getVideoElement]);
 
   /** 广播标注消息给房间内其他参会者 */
   const post = useCallback((msg: AnnotationMessage) => {

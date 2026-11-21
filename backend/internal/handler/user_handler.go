@@ -59,6 +59,27 @@ func (h *UserHandler) UploadAvatar(c *gin.Context) {
 	response.OK(c, gin.H{"avatar_url": url})
 }
 
+// UpdateName PATCH /api/v1/profile/name —— 当前用户修改自己的昵称（登录即可）
+func (h *UserHandler) UpdateName(c *gin.Context) {
+	claims := middleware.GetClaims(c)
+	if claims == nil {
+		response.Unauthorized(c, "unauthorized")
+		return
+	}
+	var req struct {
+		Name string `json:"name" binding:"required,min=1,max=50"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "name required (1-50 characters)")
+		return
+	}
+	if err := h.svc.UpdateName(claims.UserID, req.Name); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"name": req.Name})
+}
+
 // Create POST /api/v1/users —— 管理员创建账号
 func (h *UserHandler) Create(c *gin.Context) {
 	var req service.CreateUserRequest

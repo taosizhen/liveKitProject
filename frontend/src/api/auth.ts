@@ -35,3 +35,8 @@ export function uploadAvatar(file: File) {
     headers: { 'Content-Type': 'multipart/form-data' },
   }) as unknown as Promise<ApiResponse<{ avatar_url: string }>>;
 }
+
+/** 修改当前用户昵称（1~50 字符） */
+export function updateName(name: string) {
+  return http.patch('/profile/name', { name }) as unknown as Promise<ApiResponse<{ name: string }>>;
+}

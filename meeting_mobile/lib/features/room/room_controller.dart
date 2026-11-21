@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_background/flutter_background.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart' show Helper;
 import 'package:livekit_client/livekit_client.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -32,6 +35,7 @@ class ParticipantVideo {
     required this.track,
     required this.isLocal,
     required this.isScreenShare,
+    this.aspect,
   });
 
   final String identity;
@@ -39,6 +43,9 @@ class ParticipantVideo {
   final VideoTrack track;
   final bool isLocal;
   final bool isScreenShare;
+
+  /// 视频宽高比（width/height），用于标注画布与视频显示矩形对齐
+  final double? aspect;
 }
 
 /// 成员列表项
@@ -79,6 +86,7 @@ class RoomState {
     this.mainIdentity,
     this.mainIsLocal = false,
     this.mainIsScreenShare = false,
+    this.mainAspect,
     this.thumbnails = const [],
     this.members = const [],
     this.hostIdentity,
@@ -101,6 +109,9 @@ class RoomState {
   final String? mainIdentity;
   final bool mainIsLocal;
   final bool mainIsScreenShare;
+
+  /// 主画面视频宽高比（width/height），标注画布据此与视频显示矩形对齐
+  final double? mainAspect;
 
   /// 缩略图（其他参会者摄像头）
   final List<ParticipantVideo> thumbnails;
@@ -143,6 +154,7 @@ class RoomState {
     String? mainIdentity,
     bool? mainIsLocal,
     bool? mainIsScreenShare,
+    double? mainAspect,
     bool clearMain = false,
     List<ParticipantVideo>? thumbnails,
     List<RoomMember>? members,
@@ -164,6 +176,7 @@ class RoomState {
       mainIdentity: clearMain ? null : (mainIdentity ?? this.mainIdentity),
       mainIsLocal: mainIsLocal ?? this.mainIsLocal,
       mainIsScreenShare: mainIsScreenShare ?? this.mainIsScreenShare,
+      mainAspect: mainAspect ?? this.mainAspect,
       thumbnails: thumbnails ?? this.thumbnails,
       members: members ?? this.members,
       hostIdentity: hostIdentity ?? this.hostIdentity,
@@ -196,6 +209,9 @@ class RoomController extends FamilyNotifier<RoomState, String> {
   String? _speakerCandidate;
   DateTime _lastSpeakerSwitch = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _speakerConfirmTimer;
+
+  /// 视频宽高比轮询定时器：2.14 无尺寸变化事件，首帧后定时刷新
+  Timer? _dimensionTimer;
 
   /// 房间事件监听句柄，退会/重连时统一取消
   final List<CancelListenFunc> _roomListeners = [];
@@ -267,6 +283,7 @@ class RoomController extends FamilyNotifier<RoomState, String> {
 
       state = state.copyWith(phase: RoomPhase.connected, clearError: true);
       _syncTracks();
+      _startDimensionPolling();
     } on ApiException catch (e) {
       state = state.copyWith(phase: RoomPhase.failed, error: e.message);
     } catch (e) {
@@ -292,6 +309,7 @@ class RoomController extends FamilyNotifier<RoomState, String> {
       ..add(events.on<LocalTrackUnpublishedEvent>((_) => _syncTracks()))
       ..add(events.on<TrackMutedEvent>((_) => _syncTracks()))
       ..add(events.on<TrackUnmutedEvent>((_) => _syncTracks()))
+      // 视频首帧/尺寸变化通过轮询刷新宽高比（见 _startDimensionPolling）
       ..add(events.on<ActiveSpeakersChangedEvent>(
           (e) => _onActiveSpeakers(e.speakers)))
       ..add(events.on<ParticipantMetadataUpdatedEvent>((_) => _syncTracks()))
@@ -301,6 +319,7 @@ class RoomController extends FamilyNotifier<RoomState, String> {
   /// 信令断开（非主动退会时提示用户重试）
   void _onRoomDisconnected() {
     if (_leaving) return;
+    _stopDimensionPolling();
     state = state.copyWith(
       phase: RoomPhase.failed,
       error: '连接已断开，请检查网络后重试入会',
@@ -501,17 +520,65 @@ class RoomController extends FamilyNotifier<RoomState, String> {
     }
   }
 
-  /// 切换屏幕共享（iOS 需 Broadcast Upload Extension，Phase 3 支持）
+  /// 切换屏幕共享（iOS 需 Broadcast Upload Extension，暂未支持）
+  ///
+  /// Android 10+ 首次共享会弹出系统录屏授权框，且必须以「前台服务 + mediaProjection」
+  /// 类型运行，否则原生层会抛异常直接导致进程崩溃（表现为点击即闪退）。
   Future<void> toggleScreenShare() async {
     final participant = _room?.localParticipant;
     if (participant == null) return;
     final next = !state.screenSharing;
+
+    if (next && Platform.isIOS) {
+      state = state.copyWith(error: 'iOS 暂不支持屏幕共享');
+      return;
+    }
+
     try {
+      if (next && Platform.isAndroid) {
+        final ready = await _prepareAndroidScreenShare();
+        if (!ready) {
+          state = state.copyWith(error: '未获得录屏权限，无法共享屏幕');
+          return;
+        }
+      }
       await participant.setScreenShareEnabled(next);
       state = state.copyWith(screenSharing: next, clearError: true);
       _syncTracks();
-    } catch (_) {
-      state = state.copyWith(error: '当前设备暂不支持屏幕共享');
+    } catch (e) {
+      state = state.copyWith(error: '屏幕共享启动失败：$e');
+    } finally {
+      if (!next && Platform.isAndroid) {
+        await _stopAndroidScreenShare();
+      }
+    }
+  }
+
+  /// 准备 Android 投屏环境：申请录屏授权并拉起 mediaProjection 前台服务
+  ///
+  /// 返回 false 表示未获授权或前台服务拉起失败，调用方应终止共享。
+  Future<bool> _prepareAndroidScreenShare() async {
+    final granted = await Helper.requestCapturePermission();
+    if (!granted) return false;
+    if (!await FlutterBackground.hasPermissions) return false;
+
+    final initialized = await FlutterBackground.initialize(
+      androidConfig: const FlutterBackgroundAndroidConfig(
+        notificationTitle: '正在共享屏幕',
+        notificationText: '会议屏幕共享进行中',
+        notificationImportance: AndroidNotificationImportance.normal,
+        notificationIcon:
+            const AndroidResource(name: 'ic_launcher', defType: 'mipmap'),
+      ),
+    );
+    if (!initialized) return false;
+    return FlutterBackground.enableBackgroundExecution();
+  }
+
+  /// 停止投屏前台服务，释放通知栏常驻与后台保活
+  Future<void> _stopAndroidScreenShare() async {
+    if (FlutterBackground.isBackgroundExecutionEnabled) {
+      await FlutterBackground.disableBackgroundExecution();
     }
   }
 
@@ -595,6 +662,7 @@ class RoomController extends FamilyNotifier<RoomState, String> {
       mainIdentity: main?.identity,
       mainIsLocal: main?.isLocal ?? false,
       mainIsScreenShare: main?.isScreenShare ?? false,
+      mainAspect: main?.aspect,
       thumbnails: thumbnails,
       members: members,
       hostIdentity: hostIdentity,
@@ -631,8 +699,53 @@ class RoomController extends FamilyNotifier<RoomState, String> {
         track: track,
         isLocal: isLocal,
         isScreenShare: _isScreenShare(publication),
+        aspect: _aspectOf(publication),
       ));
     }
+  }
+
+  /// 从轨道发布信息读取视频宽高比（width/height），无尺寸时返回 null
+  double? _aspectOf(TrackPublication publication) {
+    final d = publication.dimensions;
+    if (d == null || d.height <= 0) return null;
+    return d.width / d.height;
+  }
+
+  /// 启动视频宽高比轮询
+  ///
+  /// livekit_client 2.14 未提供尺寸变化事件，视频首帧解码后 dimensions 才就绪，
+  /// 每 2 秒比对主轨道尺寸，变化时更新 state.mainAspect，驱动标注画布重排对齐。
+  void _startDimensionPolling() {
+    _dimensionTimer?.cancel();
+    _dimensionTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      final current = state.mainTrack;
+      final room = _room;
+      if (current == null || room == null) return;
+      double? aspect;
+      final participants = <Participant?>[
+        room.localParticipant,
+        ...room.remoteParticipants.values,
+      ];
+      for (final p in participants) {
+        if (p == null) continue;
+        for (final pub in p.trackPublications.values) {
+          if (identical(pub.track, current)) {
+            aspect = _aspectOf(pub);
+            break;
+          }
+        }
+        if (aspect != null) break;
+      }
+      if (aspect != state.mainAspect) {
+        state = state.copyWith(mainAspect: aspect);
+      }
+    });
+  }
+
+  /// 停止视频宽高比轮询（退会/断开时调用）
+  void _stopDimensionPolling() {
+    _dimensionTimer?.cancel();
+    _dimensionTimer = null;
   }
 
   /// 判断轨道是否为屏幕共享
@@ -697,6 +810,7 @@ class RoomController extends FamilyNotifier<RoomState, String> {
       await _enableMicIfHost();
       state = state.copyWith(phase: RoomPhase.connected, clearError: true);
       _syncTracks();
+      _startDimensionPolling();
     } catch (_) {
       state = state.copyWith(
         phase: RoomPhase.failed,
@@ -741,6 +855,12 @@ class RoomController extends FamilyNotifier<RoomState, String> {
     ref.read(annotationControllerProvider(arg).notifier).detach();
     ref.read(signalControllerProvider(arg).notifier).detach();
     _cancelRoomListeners();
+    _stopDimensionPolling();
+
+    // 退会时确保投屏前台服务被回收，避免通知栏常驻
+    if (Platform.isAndroid && state.screenSharing) {
+      await _stopAndroidScreenShare();
+    }
 
     // 复位主持人/发言人状态
     _speakerConfirmTimer?.cancel();
