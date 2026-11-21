@@ -111,9 +111,17 @@ cp .env.example .env          # 按需修改数据库 / LiveKit / JWT 配置
 # 编译校验
 wsl go build ./...            # Windows 侧执行等价命令
 
-# 启动（默认 :8080）
+# 启动（端口/协议由 .env 决定：APP_PORT=8090，配置 TLS_CERT 时走 HTTPS）
 wsl go run ./cmd/server
+
+# 或在 WSL 中交叉编译 Windows 可执行文件，再在 Windows 侧运行
+wsl bash -c "cd /mnt/d/CODE/WOAN/liveKitProject/backend && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o server.exe ./cmd/server"
+backend\server.exe
 ```
+
+> 启用 HTTPS（`TLS_CERT`/`TLS_KEY`）时，可同时设置 `APP_HTTP_PORT=8139` 开启一个
+> **仅 127.0.0.1 可达**的本地回环 HTTP 端口，供 Vite 开发代理转发 `/storage`
+> 静态资源（头像、材料）使用；`0` 表示关闭。
 
 SQLite 为默认存储（`backend/data/meeting.db`），无需额外数据库；
 如需 PostgreSQL，将 `DB_DRIVER` 改为 `postgres` 并填写连接信息。
@@ -125,6 +133,10 @@ cd d:\CODE\WOAN\liveKitProject\frontend
 npm install
 npm run dev      # https://localhost:5173（Vite 已配置 mkcert 自签证书）
 ```
+
+> 开发态下 API 请求由 `src/api/http.ts` 直连后端 `https://<host>:8090`；
+> Vite 代理只用于 `/api`、`/storage` 的静态资源转发（指向后端回环端口 `127.0.0.1:8139`）。
+> 注意：`frontend/` 下不要保留 `vite.config.js` 之类编译产物，否则 Vite 会优先加载它而忽略 `vite.config.ts`。
 
 ### 3. LiveKit Server 与 TLS 代理（Windows）
 
@@ -159,17 +171,39 @@ $env:PUB_CACHE='D:\CODE\WOAN\liveKitProject\.toolchain\pub-cache'
 
 ### 6. 打包 Android APK
 
+默认**只生成 arm64-v8a** 包（约 33 MB），覆盖主流安卓手机，也适用于华为 HarmonyOS NEXT
+上的「卓易通」Android 兼容环境（华为设备 CPU 为 ARM64）。
+
 ```powershell
 cd d:\CODE\WOAN\liveKitProject
-.\build_apk.ps1            # 通用 release APK（兼容所有 ABI）
-.\build_apk.ps1 -Split     # 按 ABI 拆分，体积更小（推荐真机分发）
-.\build_apk.ps1 -Clean     # 先 flutter clean 再构建
+.\build_apk.ps1              # 默认：仅 arm64-v8a 的 release 包
+.\build_apk.ps1 -AllAbis     # 需要时：按 ABI 拆出全部架构（含 armv7 / x86_64 模拟器）
+.\build_apk.ps1 -Clean       # 先 flutter clean 再构建
+.\build_apk.ps1 -Debug       # 构建 debug 包（排查问题）
+```
+
+等价的原生命令（不使用脚本时）：
+
+```powershell
+$env:PUB_CACHE='D:\CODE\WOAN\liveKitProject\.toolchain\pub-cache'
+$env:KOTLIN_USER_HOME='D:\CODE\WOAN\liveKitProject\.kotlin-home'
+& 'D:\CODE\WOAN\liveKitProject\.toolchain\flutter\bin\flutter.bat' build apk --release --target-platform android-arm64
 ```
 
 脚本会自动设置 `PUB_CACHE` 与 `KOTLIN_USER_HOME`（均指向仓库内目录，避免写入
 `%LOCALAPPDATA%` 被沙箱拦截），并把产物复制到 `dist/apk/`（文件名带时间戳）。
 
-> release 包当前使用 debug 签名，仅用于内测安装；上架前需配置正式 keystore。
+安装：
+
+```powershell
+adb install -r dist\apk\app-release-<时间戳>.apk
+```
+
+> 说明：
+> - `--target-platform android-arm64` 只包含 arm64 原生库，因此体积从通用包的 96 MB 降到约 33 MB；
+> - `-AllAbis` 对应的 `--split-per-abi` 会额外产出 armv7（约 26 MB）与 x86_64（约 39 MB，模拟器用）；
+> - 华为 HarmonyOS NEXT 需在「卓易通」内安装，并在卓易通内向应用授予相机、麦克风权限；
+> - release 包当前使用 debug 签名，仅用于内测安装；上架前需配置正式 keystore。
 
 
 ### 5. 远程控制桌面代理（被控端 PC，可选）
@@ -200,8 +234,10 @@ wsl bash -c "cd /mnt/d/CODE/WOAN/liveKitProject/desktop-agent && GOPROXY=https:/
 
 | 变量 | 说明 | 示例 |
 |---|---|---|
-| `APP_PORT` | 后端监听端口 | `8080` |
-| `CORS_ORIGIN` | 允许的前端 Origin | `http://localhost:5173` |
+| `APP_PORT` | 后端监听端口 | `8090` |
+| `APP_HTTP_PORT` | 启用 HTTPS 时的本地回环 HTTP 端口（供 Vite 代理，0 关闭） | `8139` |
+| `TLS_CERT` / `TLS_KEY` | HTTPS 证书/私钥路径（留空则走 HTTP） | `dev-tools/certs/localhost+3.pem` |
+| `CORS_ORIGIN` | 允许的前端 Origin | `https://localhost:5173` |
 | `DB_DRIVER` | `sqlite`（默认）/ `postgres` | `sqlite` |
 | `SQLITE_PATH` | SQLite 文件路径 | `./data/meeting.db` |
 | `JWT_SECRET` / `JWT_EXPIRE_HOURS` | JWT 密钥与有效期 | `24` |

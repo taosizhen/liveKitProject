@@ -4,7 +4,10 @@
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    // 构建产物输出到 node_modules 下，避免 tsc -b 在项目根生成 vite.config.js，
+    // 否则 Vite 启动时会优先加载该 JS 而忽略 vite.config.ts
+    "outDir": "node_modules/.tmp"
   },
   "include": ["vite.config.ts"]
 }

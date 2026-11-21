@@ -1,8 +1,8 @@
-﻿# 构建 Flutter Android APK（开发机无 Go 无关；仅需 Node/Flutter/JDK 已就绪）
+﻿# 构建 Flutter Android APK（默认只打 arm64-v8a，适配主流安卓手机与华为 HarmonyOS NEXT 卓易通）
 #
 # 用法：
-#   .\build_apk.ps1                 # 通用 release APK（体积较大，兼容所有 ABI）
-#   .\build_apk.ps1 -Split          # 按 ABI 拆分，产物更小（推荐真机分发）
+#   .\build_apk.ps1                 # 默认：仅 arm64-v8a 的 release 包（约 33 MB）
+#   .\build_apk.ps1 -AllAbis        # 按 ABI 拆分出全部架构（含 armv7 / x86_64 模拟器）
 #   .\build_apk.ps1 -Clean          # 先 flutter clean 再构建
 #   .\build_apk.ps1 -Debug          # 构建 debug 包（便于排查）
 #
@@ -12,7 +12,7 @@
 #    （受限沙箱环境会拦截该路径，导致构建失败）；
 # 3. release 包当前使用 debug 签名，仅用于内测安装，上架前需配置正式 keystore。
 param(
-    [switch]$Split,
+    [switch]$AllAbis,
     [switch]$Clean,
     [switch]$Debug
 )
@@ -48,14 +48,19 @@ try {
     Write-Host '==> flutter pub get' -ForegroundColor Yellow
     & $Flutter pub get
 
-    # 组装构建参数
+    # 组装构建参数：默认仅 arm64-v8a（体积小、覆盖主流手机与卓易通）
     $buildArgs = @('build', 'apk')
     if ($Debug) {
         $buildArgs += '--debug'
     }
     else {
         $buildArgs += '--release'
-        if ($Split) { $buildArgs += '--split-per-abi' }
+        if ($AllAbis) {
+            $buildArgs += '--split-per-abi'
+        }
+        else {
+            $buildArgs += @('--target-platform', 'android-arm64')
+        }
     }
 
     Write-Host "==> flutter $($buildArgs -join ' ')" -ForegroundColor Yellow

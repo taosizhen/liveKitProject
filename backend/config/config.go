@@ -28,6 +28,7 @@ type AppConfig struct {
 	BaseURL     string // 前端访问地址，用于拼接会议链接
 	TLSCert     string // HTTPS 证书路径（为空则走 HTTP）
 	TLSKey      string // HTTPS 私钥路径
+	HTTPPort    int    // 启用 HTTPS 时额外开启的本地回环 HTTP 端口（0 表示关闭）
 }
 
 // DBConfig 数据库连接配置（支持 postgres / sqlite）
@@ -89,6 +90,7 @@ func Load() (*Config, error) {
 			BaseURL:    getEnv("APP_BASE_URL", "http://localhost:5173"),
 			TLSCert:    getEnv("TLS_CERT", ""),
 			TLSKey:     getEnv("TLS_KEY", ""),
+			HTTPPort:   getEnvInt("APP_HTTP_PORT", 0),
 		},
 		DB: DBConfig{
 			Driver:     getEnv("DB_DRIVER", "postgres"),
